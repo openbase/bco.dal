@@ -22,6 +22,7 @@ package org.openbase.bco.dal.remote.control.action;
  * #L%
  */
 import java.util.concurrent.Callable;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.FutureTask;
@@ -72,6 +73,11 @@ public class Action implements ActionService, Initializable<ActionConfig> {
     @Override
     public void init(final ActionConfigType.ActionConfig config) throws InitializationException, InterruptedException {
         try {
+
+            if (config.getUnitId().isEmpty()) {
+                throw new InvalidStateException(config.getLabel() + " has not valid unit id!");
+            }
+
             this.config = config.toBuilder();
             this.data.setLabel(config.getLabel());
             this.serviceRemoteFactory = ServiceRemoteFactoryImpl.getInstance();
@@ -97,7 +103,7 @@ public class Action implements ActionService, Initializable<ActionConfig> {
     }
 
     @Override
-    public void execute() throws CouldNotPerformException {
+    public Future<Void> execute() throws CouldNotPerformException {
         synchronized (executionSync) {
             FutureTask task = new FutureTask(new Callable<Void>() {
 
@@ -121,7 +127,7 @@ public class Action implements ActionService, Initializable<ActionConfig> {
                             updateActionState(ActionState.State.FINISHING);
                             releaseService();
                             updateActionState(ActionState.State.FINISHED);
-                        } catch (InterruptedException ex) {
+                        } catch (InterruptedException | CancellationException ex) {
                             updateActionState(ActionState.State.ABORTING);
                             releaseService();
                             updateActionState(ActionState.State.ABORTED);
@@ -140,17 +146,18 @@ public class Action implements ActionService, Initializable<ActionConfig> {
             });
             executionFuture = GlobalCachedExecutorService.submit(task);
         }
+        return executionFuture;
     }
 
     private void acquireService() throws CouldNotPerformException {
         //TODO
-        logger.info("Acquire service for execution of " + this);
+        logger.debug("Acquire service for execution of " + this);
     }
 
     private void releaseService() {
         try {
             // TODO
-            logger.info("Release acquired services of " + this);
+            logger.debug("Release acquired services of " + this);
         } catch (Exception ex) {
             ExceptionPrinter.printHistory(new CouldNotPerformException("FatalExecutionError: Could not release service!", ex), logger);
         }
