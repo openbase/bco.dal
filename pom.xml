@@ -63,7 +63,6 @@
         <connection>scm:git:https://github.com/openbase/bco.dal.git</connection>
         <developerConnection>scm:git:https://github.com/openbase/bco.dal.git</developerConnection>
         <url>https://github.com/openbase/bco.dal.git</url>
-      <tag>HEAD</tag>
   </scm>
     
     <build>
