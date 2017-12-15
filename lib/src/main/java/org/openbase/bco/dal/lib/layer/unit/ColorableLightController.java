@@ -54,6 +54,7 @@ import rst.domotic.unit.device.DeviceClassType.DeviceClass;
 import rst.vision.ColorType.Color;
 import rst.vision.HSBColorType.HSBColor;
 import rst.vision.RGBColorType.RGBColor;
+import org.openbase.jul.extension.rst.transform.HSBColorToRGBColorTransformer;
 
 /**
  *
@@ -219,7 +220,11 @@ public class ColorableLightController extends AbstractDALUnitController<Colorabl
 
     @Override
     public Future<ActionFuture> setColorState(final ColorState colorState) throws CouldNotPerformException {
-        return colorService.setColorState(colorState);
+        if (colorState.getColor().getType() == Color.Type.RGB) {
+            return colorService.setColor(HSBColorToRGBColorTransformer.transform(colorState.getColor().getRgbColor()));
+        } else {
+            return colorService.setColorState(colorState);
+        }
     }
 
     @Override
