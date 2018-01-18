@@ -215,7 +215,7 @@ public class Units {
             try {
                 for (String unitId : UNIT_DIFF.getRemovedMessageMap().keySet()) {
                     if (unitRemoteRegistry.contains(unitId)) {
-                        UnitRemote unitRemote = unitRemoteRegistry.get(unitId);
+                        final UnitRemote unitRemote = unitRemoteRegistry.get(unitId);
                         try {
                             unitRemoteRegistry.remove(unitId);
                             unitRemote.unlock(unitRemoteRegistry);
@@ -315,15 +315,20 @@ public class Units {
      * @throws InterruptedException
      */
     public static void reinitialize() throws CouldNotPerformException, InterruptedException {
-        for (UnitRemote unitRemote : unitRemoteRegistry.getEntries()) {
-            try {
-                unitRemote.unlock(unitRemoteRegistry);
-                unitRemote.init(unitRemote.getConfig());
-                unitRemote.lock(unitRemoteRegistry);
-                unitRemote.requestData().get(500, TimeUnit.MILLISECONDS);
-            } catch (ExecutionException | TimeoutException ex) {
-                throw new CouldNotPerformException("Could not reinitialize Units");
+        UNIT_REMOTE_REGISTRY_LOCK.writeLock().lock();
+        try {
+            for (UnitRemote unitRemote : unitRemoteRegistry.getEntries()) {
+                try {
+                    unitRemote.unlock(unitRemoteRegistry);
+                    unitRemote.init(unitRemote.getConfig());
+                    unitRemote.lock(unitRemoteRegistry);
+                    unitRemote.requestData().get(500, TimeUnit.MILLISECONDS);
+                } catch (ExecutionException | TimeoutException ex) {
+                    throw new CouldNotPerformException("Could not reinitialize Units");
+                }
             }
+        } finally {
+            UNIT_REMOTE_REGISTRY_LOCK.writeLock().unlock();
         }
 
         resetUnitRegistryObserver();
@@ -378,7 +383,7 @@ public class Units {
         final UnitRemote<?> unitRemote;
         try {
 
-            if(shutdownInitialized) {
+            if (shutdownInitialized) {
                 throw new InvalidStateException("System shutdown is initialized!");
             }
 
