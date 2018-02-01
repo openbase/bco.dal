@@ -112,23 +112,29 @@ public abstract class ServiceRemoteManager<D> implements Activatable, Snapshotab
             // init service unit map
             for (final String unitId : unitIDList) {
 
-                // resolve unit config by unit registry
-                final UnitConfig unitConfig = Registries.getUnitRegistry().getUnitConfigById(unitId);
-
-                // filter non dal units
                 try {
-                    if (!UnitConfigProcessor.isDalUnit(unitConfig)) {
-                        continue;
-                    }
-                } catch (VerificationFailedException ex) {
-                    ExceptionPrinter.printHistory(new CouldNotPerformException("UnitConfig[" + unitConfig + "] could not be verified as a dal unit!", ex), LOGGER);
-                }
 
-                // sort dal unit by service type
-                unitConfig.getServiceConfigList().stream().forEach((serviceConfig) -> {
-                    // register unit for service type. UnitConfigs are may added twice because of dublicated type of different service pattern but are filtered by the set. 
-                    serviceMap.get(serviceConfig.getServiceDescription().getType()).add(unitConfig);
-                });
+                    // resolve unit config by unit registry
+                    final UnitConfig unitConfig = Registries.getUnitRegistry().getUnitConfigById(unitId);
+
+                    // filter non dal units
+                    try {
+                        if (!UnitConfigProcessor.isDalUnit(unitConfig)) {
+                            continue;
+                        }
+                    } catch (VerificationFailedException ex) {
+                        ExceptionPrinter.printHistory(new CouldNotPerformException("UnitConfig[" + unitConfig + "] could not be verified as a dal unit!", ex), LOGGER);
+                    }
+
+                    // sort dal unit by service type
+                    unitConfig.getServiceConfigList().stream().forEach((serviceConfig) -> {
+                        // register unit for service type. UnitConfigs are may added twice because of dublicated type of different service pattern but are filtered by the set.
+                        serviceMap.get(serviceConfig.getServiceDescription().getType()).add(unitConfig);
+                    });
+
+                } catch (CouldNotPerformException ex) {
+                    ExceptionPrinter.printHistory(new CouldNotPerformException("Could not process unit config update of Unit[" + unitId + "]!", ex), LOGGER);
+                }
             }
 
             // initialize service remotes
@@ -137,9 +143,11 @@ public abstract class ServiceRemoteManager<D> implements Activatable, Snapshotab
                 serviceRemoteMap.put(serviceType, serviceRemote);
 
                 // if already active than update the current location state.
-                if (isActive()) {
-                    serviceRemote.addDataObserver(serviceDataObserver);
-                    serviceRemote.activate();
+                synchronized (serviceRemoteMapLock) {
+                    if (isActive()) {
+                        serviceRemote.addDataObserver(serviceDataObserver);
+                        serviceRemote.activate();
+                    }
                 }
             }
         }
