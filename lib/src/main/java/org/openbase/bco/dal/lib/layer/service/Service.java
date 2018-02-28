@@ -22,19 +22,16 @@ package org.openbase.bco.dal.lib.layer.service;
  * #L%
  */
 import com.google.protobuf.GeneratedMessage;
-import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.util.Arrays;
 import java.util.Collection;
+
+import com.google.protobuf.Message;
 import org.openbase.jul.exception.CouldNotPerformException;
 import org.openbase.jul.exception.NotAvailableException;
 import org.openbase.jul.exception.NotSupportedException;
-import org.openbase.jul.extension.rst.processing.ActionDescriptionProcessor;
-import org.openbase.jul.processing.StringProcessor;
 import rst.domotic.action.ActionDescriptionType.ActionDescription;
 import rst.domotic.mode.OperationModeType;
 import rst.domotic.service.ServiceDescriptionType.ServiceDescription;
-import rst.domotic.service.ServiceStateDescriptionType.ServiceStateDescription;
 import rst.domotic.service.ServiceTemplateType;
 import rst.domotic.service.ServiceTemplateType.ServiceTemplate;
 import rst.domotic.service.ServiceTemplateType.ServiceTemplate.ServicePattern;
@@ -48,11 +45,11 @@ import rst.domotic.state.ContactStateType;
  */
 public interface Service {
 
-    public static final Package SERVICE_STATE_PACKAGE = ContactStateType.class.getPackage();
-    public static final Package SERVICE_MODE_PACKAGE = OperationModeType.OperationMode.class.getPackage();
-    public static final String SERVICE_LABEL = Service.class.getSimpleName();
+    Package SERVICE_STATE_PACKAGE = ContactStateType.class.getPackage();
+    Package SERVICE_MODE_PACKAGE = OperationModeType.OperationMode.class.getPackage();
+    String SERVICE_LABEL = Service.class.getSimpleName();
     
-    public static final String RESPONSIBLE_ACTION_FIELD_NAME = "responsible_action";
+    String RESPONSIBLE_ACTION_FIELD_NAME = "responsible_action";
     
     /**
      * This method returns the service base name of the given service type.
@@ -65,8 +62,8 @@ public interface Service {
      * @deprecated please use the methods provided by {@code org.openbase.bco.dal.lib.layer.service.Services} instead.
      */
     @Deprecated
-    public static String getServiceBaseName(ServiceTemplate.ServiceType serviceType) {
-        return StringProcessor.transformUpperCaseToCamelCase(serviceType.name()).replaceAll(Service.SERVICE_LABEL, "");
+    static String getServiceBaseName(ServiceTemplate.ServiceType serviceType) {
+        return Services.getServiceBaseName(serviceType);
     }
 
     /**
@@ -77,17 +74,8 @@ public interface Service {
      * @deprecated please use the methods provided by {@code org.openbase.bco.dal.lib.layer.service.Services} instead.
      */
     @Deprecated
-    public static String getServicePrefix(final ServiceTemplateType.ServiceTemplate.ServicePattern pattern) throws CouldNotPerformException {
-        switch (pattern) {
-            case CONSUMER:
-                return "";
-            case OPERATION:
-                return "set";
-            case PROVIDER:
-                return "get";
-            default:
-                throw new NotSupportedException(pattern, Service.class);
-        }
+    static String getServicePrefix(final ServiceTemplateType.ServiceTemplate.ServicePattern pattern) throws CouldNotPerformException {
+        return Services.getServicePrefix(pattern);
     }
 
     /**
@@ -99,16 +87,8 @@ public interface Service {
      * @deprecated please use the methods provided by {@code org.openbase.bco.dal.lib.layer.service.Services} instead.
      */
     @Deprecated
-    public static String getServiceStateName(final ServiceType serviceType) throws NotAvailableException {
-        try {
-            if (serviceType == null) {
-                assert false;
-                throw new NotAvailableException("ServiceState");
-            }
-            return StringProcessor.transformUpperCaseToCamelCase(serviceType.name()).replaceAll("Service", "");
-        } catch (CouldNotPerformException ex) {
-            throw new NotAvailableException("ServiceStateName", ex);
-        }
+    static String getServiceStateName(final ServiceType serviceType) throws NotAvailableException {
+        return Services.getServiceStateName(serviceType);
     }
 
     /**
@@ -120,16 +100,8 @@ public interface Service {
      * @deprecated please use the methods provided by {@code org.openbase.bco.dal.lib.layer.service.Services} instead.
      */
     @Deprecated
-    public static String getServiceStateName(final ServiceTemplate template) throws NotAvailableException {
-        try {
-            if (template == null) {
-                assert false;
-                throw new NotAvailableException("ServiceTemplate");
-            }
-            return getServiceStateName(template.getType());
-        } catch (CouldNotPerformException ex) {
-            throw new NotAvailableException("ServiceStateName", ex);
-        }
+    static String getServiceStateName(final ServiceTemplate template) throws NotAvailableException {
+        return Services.getServiceStateName(template);
     }
 
     /**
@@ -141,14 +113,8 @@ public interface Service {
      * @deprecated please use the methods provided by {@code org.openbase.bco.dal.lib.layer.service.Services} instead.
      */
     @Deprecated
-    public static Collection<? extends Enum> getServiceStateValues(final ServiceType serviceType) throws NotAvailableException {
-        final String serviceBaseName = getServiceBaseName(serviceType);
-        final String serviceEnumName = SERVICE_STATE_PACKAGE.getName() + "." + serviceBaseName + "Type$" + serviceBaseName + "$State";
-        try {
-            return Arrays.asList((Enum[]) (Class.forName(serviceEnumName).getMethod("values").invoke(null)));
-        } catch (ClassNotFoundException | IllegalAccessException | IllegalArgumentException | NoSuchMethodException | SecurityException | InvocationTargetException ex) {
-            throw new NotAvailableException("ServiceStateValues", serviceEnumName, ex);
-        }
+    static Collection<? extends Enum> getServiceStateValues(final ServiceType serviceType) throws NotAvailableException {
+        return Services.getServiceStateValues(serviceType);
     }
 
     /**
@@ -163,27 +129,16 @@ public interface Service {
      * @deprecated please use the methods provided by {@code org.openbase.bco.dal.lib.layer.service.Services} instead.
      */
     @Deprecated
-    public static <SC extends GeneratedMessage, SV extends Enum> SC buildServiceState(final ServiceType serviceType, SV stateValue) throws CouldNotPerformException {
-        try {
-            // create new service state builder
-            Object serviceStateBuilder = Service.getServiceStateClass(serviceType).getMethod("newBuilder").invoke(null);
-
-            // set service state value
-            serviceStateBuilder.getClass().getMethod("setValue", stateValue.getClass()).invoke(serviceStateBuilder, stateValue);
-
-            // build service state and return
-            return (SC) serviceStateBuilder.getClass().getMethod("build").invoke(serviceStateBuilder);
-        } catch (final IllegalAccessException | IllegalArgumentException | NoSuchMethodException | SecurityException | InvocationTargetException | NotAvailableException | ClassCastException ex) {
-            throw new CouldNotPerformException("Could not build service state!", ex);
-        }
+    static <SC extends GeneratedMessage, SV extends Enum> SC buildServiceState(final ServiceType serviceType, SV stateValue) throws CouldNotPerformException {
+        return Services.buildServiceState(serviceType, stateValue);
     }
 
     /**
-     * @deprecated please use the methods provided by {@code org.openbase.bco.dal.lib.layer.service.Services} instead.
+     * @deprecated please use the methods provided by {@code org.openbase.bco.dal.lib.layer.service.Services.getServiceStateClass(...)} instead.
      */
     @Deprecated
-    public static Class<? extends GeneratedMessage> detectServiceDataClass(final ServiceType serviceType) throws NotAvailableException {
-        return getServiceStateClass(serviceType);
+    static Class<? extends GeneratedMessage> detectServiceDataClass(final ServiceType serviceType) throws NotAvailableException {
+        return Services.getServiceStateClass(serviceType);
     }
 
     /**
@@ -195,14 +150,8 @@ public interface Service {
      * @deprecated please use the methods provided by {@code org.openbase.bco.dal.lib.layer.service.Services} instead.
      */
     @Deprecated
-    public static Class<? extends GeneratedMessage> getServiceStateClass(final ServiceType serviceType) throws NotAvailableException {
-        final String serviceBaseName = getServiceBaseName(serviceType);
-        final String serviceClassName = SERVICE_STATE_PACKAGE.getName() + "." + serviceBaseName + "Type$" + serviceBaseName;
-        try {
-            return (Class<? extends GeneratedMessage>) Class.forName(serviceClassName);
-        } catch (NullPointerException | ClassNotFoundException | ClassCastException ex) {
-            throw new NotAvailableException("ServiceStateClass", serviceClassName, new CouldNotPerformException("Could not detect class!", ex));
-        }
+    static Class<? extends GeneratedMessage> getServiceStateClass(final ServiceType serviceType) throws NotAvailableException {
+        return Services.getServiceStateClass(serviceType);
     }
 
     /**
@@ -216,12 +165,8 @@ public interface Service {
      * @deprecated please use the methods provided by {@code org.openbase.bco.dal.lib.layer.service.Services} instead.
      */
     @Deprecated
-    public static Method detectServiceMethod(final ServiceType serviceType, final ServicePattern servicePattern, final Class instanceClass, final Class... argumentClasses) throws CouldNotPerformException {
-        try {
-            return instanceClass.getMethod(getServicePrefix(servicePattern) + getServiceStateName(serviceType), argumentClasses);
-        } catch (NoSuchMethodException | SecurityException ex) {
-            throw new CouldNotPerformException("Could not detect service method!", ex);
-        }
+    static Method detectServiceMethod(final ServiceType serviceType, final ServicePattern servicePattern, final Class instanceClass, final Class... argumentClasses) throws CouldNotPerformException {
+        return Services.detectServiceMethod(serviceType, servicePattern, instanceClass, argumentClasses);
     }
 
     /**
@@ -234,24 +179,20 @@ public interface Service {
      * @deprecated please use the methods provided by {@code org.openbase.bco.dal.lib.layer.service.Services} instead.
      */
     @Deprecated
-    public static Method detectServiceMethod(final ServiceDescription description, final Class instanceClass, final Class... argumentClasses) throws CouldNotPerformException {
-        return detectServiceMethod(description.getType(), description.getPattern(), instanceClass, argumentClasses);
+    static Method detectServiceMethod(final ServiceDescription description, final Class instanceClass, final Class... argumentClasses) throws CouldNotPerformException {
+        return Services.detectServiceMethod(description, instanceClass, argumentClasses);
     }
 
-    public static Object invokeServiceMethod(final ServiceDescription description, final Service instance, final Object... arguments) throws CouldNotPerformException {
-        try {
-            return detectServiceMethod(description, instance.getClass(), getArgumentClasses(arguments)).invoke(instance, arguments);
-        } catch (IllegalAccessException | ExceptionInInitializerError ex) {
-            throw new NotSupportedException("ServiceType[" + description.getType().name() + "] with Pattern[" + description.getPattern() + "]", instance, ex);
-        } catch (NullPointerException ex) {
-            throw new CouldNotPerformException("Invocation failed because given instance is not available!", ex);
-        } catch (InvocationTargetException ex) {
-            if (ex.getTargetException() instanceof CouldNotPerformException) {
-                throw (CouldNotPerformException) ex.getTargetException();
-            } else {
-                throw new CouldNotPerformException("Invocation failed!", ex.getTargetException());
-            }
-        }
+
+    /**
+     *
+     * @return
+     * @throws CouldNotPerformException
+     * @deprecated please use the methods provided by {@code org.openbase.bco.dal.lib.layer.service.Services} instead.
+     */
+    @Deprecated
+    static Object invokeServiceMethod(final ServiceDescription description, final Service instance, final Object... arguments) throws CouldNotPerformException {
+        return invokeServiceMethod(description, instance, arguments);
     }
 
     /**
@@ -267,20 +208,8 @@ public interface Service {
      * @deprecated please use the methods provided by {@code org.openbase.bco.dal.lib.layer.service.Services} instead.
      */
     @Deprecated
-    public static Object invokeServiceMethod(final ServiceType serviceType, final ServicePattern servicePattern, final Object instance, final Object... arguments) throws CouldNotPerformException, NotSupportedException, IllegalArgumentException {
-        try {
-            return detectServiceMethod(serviceType, servicePattern, instance.getClass(), getArgumentClasses(arguments)).invoke(instance, arguments);
-        } catch (IllegalAccessException | ExceptionInInitializerError ex) {
-            throw new NotSupportedException("ServiceType[" + serviceType.name() + "] with Pattern[" + servicePattern + "]", instance, ex);
-        } catch (NullPointerException ex) {
-            throw new CouldNotPerformException("Invocation failed because given instance is not available!", ex);
-        } catch (InvocationTargetException ex) {
-            if (ex.getTargetException() instanceof CouldNotPerformException) {
-                throw (CouldNotPerformException) ex.getTargetException();
-            } else {
-                throw new CouldNotPerformException("Invocation failed!", ex.getTargetException());
-            }
-        }
+    static Object invokeServiceMethod(final ServiceType serviceType, final ServicePattern servicePattern, final Object instance, final Object... arguments) throws CouldNotPerformException, NotSupportedException, IllegalArgumentException {
+        return Services.invokeServiceMethod(serviceType, servicePattern, instance, arguments);
     }
 
     /**
@@ -295,8 +224,8 @@ public interface Service {
      * @deprecated please use the methods provided by {@code org.openbase.bco.dal.lib.layer.service.Services} instead.
      */
     @Deprecated
-    public static Object invokeProviderServiceMethod(final ServiceType serviceType, final Object instance, final Object... arguments) throws CouldNotPerformException, NotSupportedException, IllegalArgumentException {
-        return invokeServiceMethod(serviceType, ServicePattern.PROVIDER, instance, arguments);
+    static Object invokeProviderServiceMethod(final ServiceType serviceType, final Object instance, final Object... arguments) throws CouldNotPerformException, NotSupportedException, IllegalArgumentException {
+        return Services.invokeProviderServiceMethod(serviceType, instance, arguments);
     }
 
     /**
@@ -311,8 +240,8 @@ public interface Service {
      * @deprecated please use the methods provided by {@code org.openbase.bco.dal.lib.layer.service.Services} instead.
      */
     @Deprecated
-    public static Object invokeOperationServiceMethod(final ServiceType serviceType, final Object instance, final Object... arguments) throws CouldNotPerformException, NotSupportedException, IllegalArgumentException {
-        return invokeServiceMethod(serviceType, ServicePattern.OPERATION, instance, arguments);
+    static Object invokeOperationServiceMethod(final ServiceType serviceType, final Object instance, final Object... arguments) throws CouldNotPerformException, NotSupportedException, IllegalArgumentException {
+        return Services.invokeOperationServiceMethod(serviceType, instance, arguments);
     }
 
     /**
@@ -322,12 +251,8 @@ public interface Service {
      * @deprecated please use the methods provided by {@code org.openbase.bco.dal.lib.layer.service.Services} instead.
      */
     @Deprecated
-    public static Class[] getArgumentClasses(final Object[] arguments) {
-        Class[] classes = new Class[arguments.length];
-        for (int i = 0; i < classes.length; i++) {
-            classes[i] = arguments[i].getClass();
-        }
-        return classes;
+    static Class[] getArgumentClasses(final Object[] arguments) {
+        return Services.getArgumentClasses(arguments);
     }
 
     /**
@@ -340,27 +265,8 @@ public interface Service {
      * @deprecated please use the methods provided by {@code org.openbase.bco.dal.lib.layer.service.Services} instead.
      */
     @Deprecated
-    public static ActionDescription.Builder upateActionDescription(final ActionDescription.Builder actionDescription, final Object serviceAttribue, final ServiceType serviceType) throws CouldNotPerformException {
-        ServiceStateDescription.Builder serviceStateDescription = actionDescription.getServiceStateDescriptionBuilder();
-        ServiceJSonProcessor jSonProcessor = new ServiceJSonProcessor();
-
-        serviceStateDescription.setServiceAttribute(jSonProcessor.serialize(serviceAttribue));
-        serviceStateDescription.setServiceAttributeType(jSonProcessor.getServiceAttributeType(serviceAttribue));
-        serviceStateDescription.setServiceType(serviceType);
-
-        String description = actionDescription.getDescription();
-        description = description.replace(ActionDescriptionProcessor.SERVICE_TYPE_KEY, serviceType.name());
-
-        // update authority if available
-        if (actionDescription.hasActionAuthority() && actionDescription.getActionAuthority().hasAuthority()) {
-            description = description.replace(ActionDescriptionProcessor.AUTHORITY_KEY, StringProcessor.transformToCamelCase(actionDescription.getActionAuthority().getAuthority().name()));
-        }
-
-        // TODO: also replace SERVICE_ATTRIBUTE_KEY in description with a nice serviceAttribute representation
-        String serviceAttributeRepresentation = StringProcessor.formatHumanReadable(serviceAttribue.toString());
-        description = description.replace(ActionDescriptionProcessor.SERVICE_ATTIBUTE_KEY, serviceAttributeRepresentation);
-        actionDescription.setLabel(actionDescription.getLabel().replace(ActionDescriptionProcessor.SERVICE_ATTIBUTE_KEY, serviceAttributeRepresentation));
-        return actionDescription.setDescription(StringProcessor.removeDoubleWhiteSpaces(description));
+    static ActionDescription.Builder upateActionDescription(final ActionDescription.Builder actionDescription, final Object serviceAttribue, final ServiceType serviceType) throws CouldNotPerformException {
+        return Services.updateActionDescription(actionDescription, (Message) serviceAttribue, serviceType);
     }
 
     /**
@@ -372,8 +278,8 @@ public interface Service {
      * @deprecated please use the methods provided by {@code org.openbase.bco.dal.lib.layer.service.Services} instead.
      */
     @Deprecated
-    public static ActionDescription.Builder upateActionDescription(final ActionDescription.Builder actionDescription, final Object serviceAttribue) throws CouldNotPerformException {
-        return upateActionDescription(actionDescription, serviceAttribue, getServiceType(serviceAttribue));
+    static ActionDescription.Builder upateActionDescription(final ActionDescription.Builder actionDescription, final Object serviceAttribue) throws CouldNotPerformException {
+        return Services.updateActionDescription(actionDescription, (Message) serviceAttribue);
     }
 
     /**
@@ -384,14 +290,7 @@ public interface Service {
      * @deprecated please use the methods provided by {@code org.openbase.bco.dal.lib.layer.service.Services} instead.
      */
     @Deprecated
-    public static ServiceType getServiceType(final Object serviceAttribute) throws CouldNotPerformException {
-        //TODO: this does not work for serviceTypes like smokeAlarmStateService since the serviceAttribute is an AlarmState
-
-        String serviceTypeName = StringProcessor.transformToUpperCase(serviceAttribute.getClass().getSimpleName() + SERVICE_LABEL);
-        try {
-            return ServiceType.valueOf(serviceTypeName);
-        } catch (IllegalArgumentException ex) {
-            throw new CouldNotPerformException("Could not resolve ServiceType for [" + serviceAttribute.getClass().getSimpleName() + "]");
-        }
+    static ServiceType getServiceType(final Object serviceAttribute) throws CouldNotPerformException {
+        return Services.getServiceType(serviceAttribute);
     }
 }

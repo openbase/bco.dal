@@ -165,7 +165,7 @@ public class ActionImpl implements Action {
                             updateActionState(ActionState.State.EXECUTING);
 
                             try {
-                                Service.invokeServiceMethod(serviceDescription, unit, serviceAttribute);
+                                waitForExecution(Services.invokeServiceMethod(serviceDescription, unit, serviceAttribute));
                                 actionDescriptionBuilder.setTransactionId(unit.getTransactionIdByServiceType(actionDescriptionBuilder.getServiceStateDescription().getServiceType()));
                             } catch (CouldNotPerformException ex) {
                                 if (ex.getCause() instanceof InterruptedException) {
@@ -245,7 +245,8 @@ public class ActionImpl implements Action {
                             updateActionState(ActionState.State.EXECUTING);
 
                             try {
-                                Service.invokeServiceMethod(serviceDescription, unit, serviceAttribute);
+                                waitForExecution(Services.invokeServiceMethod(serviceDescription, unit, serviceAttribute));
+
                                 actionDescriptionBuilder.setTransactionId(unit.getTransactionIdByServiceType(actionDescriptionBuilder.getServiceStateDescription().getServiceType()));
                             } catch (CouldNotPerformException ex) {
                                 if (ex.getCause() instanceof InterruptedException) {
@@ -282,12 +283,12 @@ public class ActionImpl implements Action {
 
     private void setRequestedState() throws CouldNotPerformException {
         try (ClosableDataBuilder dataBuilder = unit.getDataBuilder(this)) {
-            // im serviceAttribute actionDescription setzen
-            Message.Builder serviceStateBuilder = ((Message) serviceAttribute).toBuilder();
-            Descriptors.FieldDescriptor fieldDescriptor = ProtoBufFieldProcessor.getFieldDescriptor(serviceStateBuilder, "responsible_action");
+            // set the responsible action for the service attribute
+            Message.Builder serviceStateBuilder = serviceAttribute.toBuilder();
+            Descriptors.FieldDescriptor fieldDescriptor = ProtoBufFieldProcessor.getFieldDescriptor(serviceStateBuilder, Service.RESPONSIBLE_ACTION_FIELD_NAME);
             serviceStateBuilder.setField(fieldDescriptor, actionDescriptionBuilder.build());
 
-            // im dataBuilder serviceAttribute als requested state setzen
+            // set the updated service attribute as requested state in the unit data builder
             Services.invokeServiceMethod(serviceDescription.getType(), serviceDescription.getPattern(), ServiceTempus.REQUESTED, dataBuilder.getInternalBuilder(), serviceStateBuilder);
         }
     }
@@ -306,6 +307,14 @@ public class ActionImpl implements Action {
     private void updateActionState(ActionState.State state) {
         actionDescriptionBuilder.setActionState(ActionState.newBuilder().setValue(state));
         LOGGER.debug("StateUpdate[" + state.name() + "] of " + this);
+    }
+
+    private void waitForExecution(final Object result) throws ExecutionException, InterruptedException {
+        if(result instanceof Future) {
+            ((Future) result).get();
+        } else {
+            LOGGER.warn("Service["+serviceDescription.getType()+"] implementation of "+unit+" does not provide feedback about triggered operation! Just continue without feedback...");
+        }
     }
 
     @Override
