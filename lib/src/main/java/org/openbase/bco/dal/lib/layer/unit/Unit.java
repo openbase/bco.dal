@@ -311,7 +311,7 @@ public interface Unit<D> extends LabelProvider, ScopeProvider, Identifiable<Stri
             if (!getConfig().hasPlacementConfig()) {
                 throw new NotAvailableException("PlacementConfig");
             }
-            //release todo: rename PlacementConfig position into pose.
+            //todo release : rename PlacementConfig position into pose.
             if (!getConfig().getPlacementConfig().hasPosition()) {
                 throw new NotAvailableException("Position");
             }
@@ -639,7 +639,7 @@ public interface Unit<D> extends LabelProvider, ScopeProvider, Identifiable<Stri
     @Deprecated
     default LocationRegistry getLocationRegistry() throws NotAvailableException {
         // method is only needed because the registry is still throwing a InterruptedException which will removed in a future release.
-        // release todo: can be removed later on
+        // todo release: can be removed later on
         try {
             try {
                 return CachedLocationRegistryRemote.getRegistry();
@@ -709,6 +709,9 @@ public interface Unit<D> extends LabelProvider, ScopeProvider, Identifiable<Stri
     /**
      * Add an observer which is only notified if the desired service type for
      * the desired service tempus changes.
+     * The service data notified can be empty. If you want to filter these updates
+     * you can use the ServiceStateObserver. Empty updates are left in because when
+     * observing requested states this can indicate that it is taken over as the current state.
      *
      * @param serviceTempus The service tempus on which the observer is added.
      * @param serviceType   The service type on which the observer is added.
