@@ -10,12 +10,12 @@ package org.openbase.bco.dal.visual.util;
  * it under the terms of the GNU General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
- * 
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public
  * License along with this program.  If not, see
  * <http://www.gnu.org/licenses/gpl-3.0.html>.
@@ -24,11 +24,14 @@ package org.openbase.bco.dal.visual.util;
 import java.awt.Color;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Future;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import javax.swing.DefaultComboBoxModel;
 import javax.swing.SwingUtilities;
+
+import org.openbase.bco.dal.lib.layer.unit.Unit;
 import org.openbase.bco.registry.remote.Registries;
 import org.openbase.jul.exception.CouldNotPerformException;
 import org.openbase.jul.exception.InitializationException;
@@ -49,10 +52,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import rst.domotic.registry.LocationRegistryDataType.LocationRegistryData;
 import rst.domotic.registry.UnitRegistryDataType;
+import rst.domotic.service.ServiceConfigType.ServiceConfig;
+import rst.domotic.service.ServiceDescriptionType.ServiceDescription;
 import rst.domotic.service.ServiceTemplateType.ServiceTemplate.ServiceType;
 import rst.domotic.state.EnablingStateType.EnablingState;
 import rst.domotic.unit.UnitConfigType.UnitConfig;
 import rst.domotic.unit.UnitTemplateType;
+import rst.domotic.unit.UnitTemplateType.UnitTemplate;
 import rst.domotic.unit.UnitTemplateType.UnitTemplate.UnitType;
 import rst.rsb.ScopeType.Scope;
 
@@ -98,7 +104,7 @@ public class SelectorPanel extends javax.swing.JPanel {
         locationComboBox.setEnabled(value);
         unitTypeComboBox.setEnabled(value);
         unitConfigComboBox.setEnabled(value);
-        serviceTypeComboBox.setEnabled(false);
+        serviceTypeComboBox.setEnabled(value);
         scopeTextField.setEnabled(value);
         scopeCancelButton.setEnabled(value);
         scopeApplyButton.setEnabled(value);
@@ -173,6 +179,7 @@ public class SelectorPanel extends javax.swing.JPanel {
                 ExceptionPrinter.printHistory(ex, logger, LogLevel.ERROR);
             }
 
+            // store selection to recover state after update
             try {
                 selectedUnitConfigHolder = (UnitConfigHolder) unitConfigComboBox.getSelectedItem();
             } catch (Exception ex) {
@@ -180,6 +187,64 @@ public class SelectorPanel extends javax.swing.JPanel {
                 ExceptionPrinter.printHistory(ex, logger);
             }
 
+
+            // update unit types
+            try {
+                ArrayList<UnitTypeHolder> unitTypeHolderList = new ArrayList<>();
+
+                // apply service type filter if needed
+                if(serviceTypeComboBox.getSelectedItem() != null && !((ServiceTypeHolder) serviceTypeComboBox.getSelectedItem()).isNotSpecified()) {
+                    unitTypeHolderList.add(new UnitTypeHolder(UnitType.UNKNOWN));
+                    final ServiceType serviceTypeFilter = ((ServiceTypeHolder) serviceTypeComboBox.getSelectedItem()).getServiceType();
+                    for (final UnitTemplate unitTemplate : Registries.getUnitRegistry().getUnitTemplates()) {
+                        for (final ServiceDescription serviceDescription : unitTemplate.getServiceDescriptionList()) {
+                            if(serviceDescription.getType() == serviceTypeFilter) {
+                                unitTypeHolderList.add(new UnitTypeHolder(unitTemplate.getType()));
+                                break;
+                            }
+                        }
+                    }
+                } else {
+                    for (final UnitType type : UnitTemplateType.UnitTemplate.UnitType.values()) {
+                        unitTypeHolderList.add(new UnitTypeHolder(type));
+                    }
+                }
+
+                Collections.sort(unitTypeHolderList);
+                SwingUtilities.invokeLater(() -> {
+                    unitTypeComboBox.setModel(new javax.swing.DefaultComboBoxModel(unitTypeHolderList.toArray()));
+                });
+            } catch (Exception ex) {
+                locationComboBox.setEnabled(false);
+                ExceptionPrinter.printHistory(ex, logger);
+            }
+
+            // update service types
+            try {
+                ArrayList<ServiceTypeHolder> serviceTypeHolderList = new ArrayList<>();
+
+                // apply unit type filter if needed
+                if(unitTypeComboBox.getSelectedItem() != null && !((UnitTypeHolder)unitTypeComboBox.getSelectedItem()).isNotSpecified()) {
+                    serviceTypeHolderList.add(new ServiceTypeHolder(ServiceType.UNKNOWN));
+                    for (final ServiceDescription serviceDescription : Registries.getUnitRegistry().getUnitTemplateByType(((UnitTypeHolder) unitTypeComboBox.getSelectedItem()).getType()).getServiceDescriptionList()) {
+                        serviceTypeHolderList.add(new ServiceTypeHolder(serviceDescription.getType()));
+                    }
+                } else {
+                    for (ServiceType type : ServiceType.values()) {
+                        serviceTypeHolderList.add(new ServiceTypeHolder(type));
+                    }
+                }
+
+                Collections.sort(serviceTypeHolderList);
+                SwingUtilities.invokeLater(() -> {
+                    serviceTypeComboBox.setModel(new javax.swing.DefaultComboBoxModel(serviceTypeHolderList.toArray()));
+                });
+            } catch (Exception ex) {
+                locationComboBox.setEnabled(false);
+                ExceptionPrinter.printHistory(ex, logger);
+            }
+
+            // update location types
             try {
                 ArrayList<LocationUnitConfigHolder> locationConfigHolderList = new ArrayList<>();
                 locationConfigHolderList.add(ALL_LOCATION);
@@ -203,54 +268,64 @@ public class SelectorPanel extends javax.swing.JPanel {
             try {
                 ArrayList<UnitConfigHolder> unitConfigHolderList = new ArrayList<>();
                 UnitType selectedUnitType = ((UnitTypeHolder) unitTypeComboBox.getSelectedItem()).getType();
-                if (selectedUnitType == UnitType.UNKNOWN) {
-                    if (selectedLocationConfigHolder != null && !selectedLocationConfigHolder.isNotSpecified()) {
-                        for (final UnitConfig config : Registries.getLocationRegistry().getUnitConfigsByLocation(selectedLocationConfigHolder.getConfig().getId())) {
-                            try {
-                                unitConfigHolderList.add(new UnitConfigHolder(config, Registries.getLocationRegistry().getLocationConfigById(config.getPlacementConfig().getLocationId())));
-                            } catch (CouldNotPerformException ex) {
-                                exceptionStack = MultiException.push(this, ex, exceptionStack);
-                            }
-                        }
-                    } else {
-                        for (UnitConfig config : Registries.getUnitRegistry().getUnitConfigs()) {
-                            try {
-                                // ignore disabled units
-                                if (config.getEnablingState().getValue() != EnablingState.State.ENABLED) {
-                                    continue;
-                                }
-                                if (config.getPlacementConfig().getLocationId().isEmpty()) {
-                                    throw new InvalidStateException("Could not load location unit of " + config.getLabel() + " because its not configured!");
-                                }
-                                unitConfigHolderList.add(new UnitConfigHolder(config, Registries.getLocationRegistry().getLocationConfigById(config.getPlacementConfig().getLocationId())));
-                            } catch (CouldNotPerformException ex) {
-                                exceptionStack = MultiException.push(this, ex, exceptionStack);
-                            }
-                        }
-                    }
-                } else if (selectedLocationConfigHolder != null && !selectedLocationConfigHolder.isNotSpecified()) {
-                    for (UnitConfig config : Registries.getLocationRegistry().getUnitConfigsByLocation(selectedUnitType, selectedLocationConfigHolder.getConfig().getId())) {
-                        try {
-                            unitConfigHolderList.add(new UnitConfigHolder(config, Registries.getLocationRegistry().getLocationConfigById(config.getPlacementConfig().getLocationId())));
-                        } catch (CouldNotPerformException ex) {
-                            exceptionStack = MultiException.push(this, ex, exceptionStack);
-                        }
-                    }
+                ServiceType selectedServiceType = ((ServiceTypeHolder) serviceTypeComboBox.getSelectedItem()).getServiceType();
+
+                // generate unit config list
+                List<UnitConfig> selectedUnitConfigs = new ArrayList<>();
+                if (selectedLocationConfigHolder != null && !selectedLocationConfigHolder.isNotSpecified()) {
+                    selectedUnitConfigs.addAll(Registries.getLocationRegistry().getUnitConfigsByLocation(selectedLocationConfigHolder.getConfig().getId()));
                 } else {
-                    for (UnitConfig config : Registries.getUnitRegistry().getUnitConfigs(selectedUnitType)) {
-                        try {
-                            // ignore disabled units
-                            if (config.getEnablingState().getValue() != EnablingState.State.ENABLED) {
-                                continue;
-                            }
-                            unitConfigHolderList.add(new UnitConfigHolder(config, Registries.getLocationRegistry().getLocationConfigById(config.getPlacementConfig().getLocationId())));
-                        } catch (CouldNotPerformException ex) {
-                            exceptionStack = MultiException.push(this, ex, exceptionStack);
+                    selectedUnitConfigs.addAll(Registries.getUnitRegistry().getUnitConfigs());
+                }
+
+                for (UnitConfig unitConfig : selectedUnitConfigs) {
+
+                    // filter disabled units
+                    if (unitConfig.getEnablingState().getValue() != EnablingState.State.ENABLED) {
+                        continue;
+                    }
+
+                    if (unitConfig.getPlacementConfig().getLocationId().isEmpty()) {
+                        logger.warn("Could not load location unit of " + unitConfig.getLabel() + " because its location is not configured!");
+                        continue;
+                    }
+
+                    // filter units by selections
+                    if (selectedUnitType != UnitType.UNKNOWN) {
+                        if(unitConfig.getType() != selectedUnitType) {
+                            continue;
                         }
+                    }
+
+                    // filter service by selections
+                    if (selectedServiceType != ServiceType.UNKNOWN) {
+                        boolean found = false;
+                        for (final ServiceConfig serviceConfig : unitConfig.getServiceConfigList()) {
+                            if(serviceConfig.getServiceDescription().getType() == selectedServiceType) {
+                                found = true;
+                                break;
+                            }
+                        }
+
+                        if(!found) {
+                            continue;
+                        }
+                    }
+
+                    // generate config holder for unit
+                    try {
+                        unitConfigHolderList.add(new UnitConfigHolder(unitConfig, Registries.getUnitRegistry().getUnitConfigById(unitConfig.getPlacementConfig().getLocationId())));
+                    } catch (CouldNotPerformException ex) {
+                        exceptionStack = MultiException.push(this, ex, exceptionStack);
                     }
                 }
+
+                // sort units
                 Collections.sort(unitConfigHolderList);
+
+                // setup model
                 unitConfigComboBox.setModel(new DefaultComboBoxModel(unitConfigHolderList.toArray()));
+
                 if (selectedUnitConfigHolder != null) {
                     int selectedUnitIndex = Collections.binarySearch(unitConfigHolderList, selectedUnitConfigHolder);
                     if (selectedUnitIndex >= 0) {
@@ -258,6 +333,11 @@ public class SelectorPanel extends javax.swing.JPanel {
                     }
                 }
                 unitConfigComboBox.setEnabled(unitConfigHolderList.size() > 0);
+
+                if(selectedUnitType == UnitType.LOCATION) {
+                    locationComboBox.setSelectedIndex(0);
+                    locationComboBox.setEnabled(false);
+                }
             } catch (CouldNotPerformException ex) {
                 unitConfigComboBox.setEnabled(false);
                 throw ex;
@@ -300,7 +380,7 @@ public class SelectorPanel extends javax.swing.JPanel {
                     // selection has not been changed.
                     return;
                 }
-                statusPanel.setStatus("Load new remote control " + unitConfigHolder + "...", StatusPanel.StatusType.INFO, executeSingleTask((Callable<Void>) () -> {
+                statusPanel.setStatus("Load " + unitConfigHolder + "...", StatusPanel.StatusType.INFO, executeSingleTask((Callable<Void>) () -> {
                     try {
                         unitConfigComboBox.setForeground(Color.BLACK);
                         unitConfigObservable.notifyObservers(selectedUnitConfig);
@@ -387,6 +467,12 @@ public class SelectorPanel extends javax.swing.JPanel {
         locationComboBox.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent evt) {
                 locationComboBoxActionPerformed(evt);
+            }
+        });
+
+        serviceTypeComboBox.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                serviceTypeComboBoxActionPerformed(evt);
             }
         });
 
@@ -607,6 +693,10 @@ public class SelectorPanel extends javax.swing.JPanel {
         }
     }//GEN-LAST:event_scopeTextFieldActionPerformed
 
+    private void serviceTypeComboBoxActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_serviceTypeComboBoxActionPerformed
+        updateDynamicComponents();
+    }//GEN-LAST:event_serviceTypeComboBoxActionPerformed
+
     private void locationComboBoxActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_locationComboBoxActionPerformed
         updateDynamicComponents();
     }//GEN-LAST:event_locationComboBoxActionPerformed
@@ -617,7 +707,7 @@ public class SelectorPanel extends javax.swing.JPanel {
 
     private void scopeApplyButtonActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_scopeApplyButtonActionPerformed
         try {
-            statusPanel.setStatus("Load new remote control " + scopeTextField.getText().toLowerCase() + "...", StatusPanel.StatusType.INFO, executeSingleTask(new Callable<Void>() {
+            statusPanel.setStatus("Load " + scopeTextField.getText().toLowerCase() + "...", StatusPanel.StatusType.INFO, executeSingleTask(new Callable<Void>() {
                 @Override
                 public Void call() throws Exception {
                     try {
@@ -729,7 +819,9 @@ public class SelectorPanel extends javax.swing.JPanel {
 
         private final UnitConfig locationUnitConfig;
 
-        public LocationUnitConfigHolder(UnitConfig locationUnitConfig) {
+        public
+
+        LocationUnitConfigHolder(UnitConfig locationUnitConfig) {
             this.locationUnitConfig = locationUnitConfig;
         }
 

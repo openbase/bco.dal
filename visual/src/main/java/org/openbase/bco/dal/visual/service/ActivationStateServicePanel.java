@@ -134,7 +134,6 @@ public class ActivationStateServicePanel extends AbstractServicePanel<Activation
     @Override
     protected void updateDynamicComponents() {
         try {
-            logger.info("state: " + getProviderService().getActivationState().getValue().name());
             switch (getProviderService().getActivationState().getValue()) {
                 case ACTIVE:
                     activationStatusLabel.setForeground(Color.BLACK);

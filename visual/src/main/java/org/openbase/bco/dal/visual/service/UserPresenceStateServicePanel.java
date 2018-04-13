@@ -120,7 +120,6 @@ public class UserPresenceStateServicePanel extends AbstractServicePanel<UserPres
     @Override
     protected void updateDynamicComponents() {
         try {
-            logger.info("state: " + getProviderService().getUserPresenceState().getValue().name());
             switch (getProviderService().getUserPresenceState().getValue()) {
                 case AT_HOME:
                     userPresenceStateLabel.setForeground(Color.BLACK);

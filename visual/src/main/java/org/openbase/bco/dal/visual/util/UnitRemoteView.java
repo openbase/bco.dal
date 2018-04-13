@@ -102,18 +102,18 @@ public abstract class UnitRemoteView<RS extends AbstractUnitRemote> extends java
 
     public void setUnitRemote(final Scope scope) throws CouldNotPerformException, InterruptedException {
         try {
-            logger.info("Setup unit remote: " + ScopeGenerator.generateStringRep(scope));
             RS remote = (RS) Units.getUnitByScope(scope, false);
+            logger.debug("Setup " + remote);
             setRemoteService(remote);
         } catch (CouldNotPerformException ex) {
-            throw new CouldNotPerformException("Could not setup unit remote config!", ex);
+            throw new CouldNotPerformException("Could not setup unit remote scope!", ex);
         }
     }
 
     public RS setUnitRemote(final UnitConfig unitConfig) throws CouldNotPerformException, InterruptedException {
-        logger.info("Setup unit remote: " + unitConfig.getId());
         try {
             RS remote = (RS) Units.getUnit(unitConfig, false);
+            logger.debug("Setup " + remote);
             setRemoteService((RS) remote);
             return remote;
         } catch (CouldNotPerformException ex) {

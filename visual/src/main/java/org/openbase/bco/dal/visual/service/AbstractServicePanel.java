@@ -94,39 +94,12 @@ public abstract class AbstractServicePanel<PS extends ProviderService, CS extend
         try {
             this.serviceConfigs = new ServiceConfig[3];
             this.statusPanel = StatusPanel.getInstance();
-//            this.recurrenceActionFilter = new RecurrenceEventFilter<Future>() {
-//
-//                @Override
-//                public void relay() throws Exception {
-//
-//                }
-//            };
             this.dataObserver = (Observer) (Observable source, Object data) -> {
                 updateDynamicComponents();
             };
             this.connectionStateObserver = (Observable<ConnectionState> source, ConnectionState connectionState) -> {
                 enableComponents(this, connectionState.equals(ConnectionState.CONNECTED));
-                logger.info("enable: " + connectionState.equals(ConnectionState.CONNECTED));
             };
-//            GlobalExecutionService.submit(() -> {
-//                while (!Thread.currentThread().isInterrupted()) {
-//                    synchronized (executerSync) {
-//                        if (lastCallable == null) {
-//                            try {
-//                                executerSync.wait();
-//                            } catch (InterruptedException ex) {
-//                                break;
-//                            }
-//                        }
-//                        try {
-//
-//                        } catch (NotAvailableException ex) {
-//                            ExceptionPrinter.printHistory(ex, logger, LogLevel.ERROR);
-//                        }
-//                        lastCallable = null;
-//                    }
-//                }
-//            });
         } catch (CouldNotPerformException ex) {
             throw new InstantiationException(this, ex);
         }

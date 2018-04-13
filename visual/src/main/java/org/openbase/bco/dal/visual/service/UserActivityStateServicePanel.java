@@ -164,7 +164,6 @@ public class UserActivityStateServicePanel extends AbstractServicePanel<UserActi
         try {
             if (getProviderService().getUserActivityState().hasActivityId() && !getProviderService().getUserActivityState().getActivityId().isEmpty()) {
                 UserActivityConfig userActivityConfig = Registries.getUserActivityRegistry().getUserActivityConfigById(getProviderService().getUserActivityState().getActivityId());
-                logger.info("state: " + userActivityConfig.getLabel());
                 userActivityComboBox.getModel().setSelectedItem(new UserActivityConfigHolder(userActivityConfig));
                 userActivityStateLabel.setText("Current UserActivityState = " + userActivityConfig.getLabel());
             }

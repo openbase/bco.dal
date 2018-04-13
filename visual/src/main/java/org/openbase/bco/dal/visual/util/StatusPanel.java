@@ -143,15 +143,15 @@ public class StatusPanel extends javax.swing.JPanel {
         switch (type) {
             case INFO:
                 statusLabel.setForeground(Color.BLACK);
-                logger.info("Status: " + text);
+                logger.info(text);
                 break;
             case WARN:
                 statusLabel.setForeground(Color.ORANGE.darker().darker().darker());
-                logger.warn("Status: " + text);
+                logger.warn(text);
                 break;
             case ERROR:
                 statusLabel.setForeground(Color.RED.darker().darker());
-                logger.error("Status: " + text);
+                logger.error(text);
                 break;
         }
         statusLabel.setText(text);
