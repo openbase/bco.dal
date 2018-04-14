@@ -21,24 +21,12 @@ package org.openbase.bco.dal.visual.util;
  * <http://www.gnu.org/licenses/gpl-3.0.html>.
  * #L%
  */
-import java.awt.Color;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.concurrent.Callable;
-import java.util.concurrent.Future;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
-import javax.swing.DefaultComboBoxModel;
-import javax.swing.SwingUtilities;
 
-import org.openbase.bco.dal.lib.layer.unit.Unit;
+import org.apache.commons.lang.builder.EqualsBuilder;
+import org.apache.commons.lang.builder.HashCodeBuilder;
 import org.openbase.bco.registry.remote.Registries;
-import org.openbase.jul.exception.CouldNotPerformException;
-import org.openbase.jul.exception.InitializationException;
+import org.openbase.jul.exception.*;
 import org.openbase.jul.exception.InstantiationException;
-import org.openbase.jul.exception.InvalidStateException;
-import org.openbase.jul.exception.MultiException;
-import org.openbase.jul.exception.NotAvailableException;
 import org.openbase.jul.exception.printer.ExceptionPrinter;
 import org.openbase.jul.exception.printer.LogLevel;
 import org.openbase.jul.extension.rsb.scope.ScopeGenerator;
@@ -62,26 +50,48 @@ import rst.domotic.unit.UnitTemplateType.UnitTemplate;
 import rst.domotic.unit.UnitTemplateType.UnitTemplate.UnitType;
 import rst.rsb.ScopeType.Scope;
 
+import javax.swing.*;
+import java.awt.*;
+import java.util.*;
+import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.Future;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
+
 /**
- *
  * @author <a href="mailto:divine@openbase.org">Divine Threepwood</a>
  */
 public class SelectorPanel extends javax.swing.JPanel {
 
+    public final static LocationUnitConfigHolder ALL_LOCATION = new LocationUnitConfigHolder(null);
+    public final static UnitConfigHolder ALL_UNIT = new UnitConfigHolder(null, null);
+    public final static ServiceTypeHolder ALL_Service = new ServiceTypeHolder(ServiceType.UNKNOWN);
     protected static final Logger logger = LoggerFactory.getLogger(SelectorPanel.class);
-
+    private final ReentrantReadWriteLock updateComponentLock;
     private StatusPanel statusPanel;
-
     private LocationUnitConfigHolder selectedLocationConfigHolder;
     private UnitConfigHolder selectedUnitConfigHolder;
-
     private ObservableImpl<UnitConfig> unitConfigObservable;
-
     private boolean init = false;
-
     private Future currentTask;
-
-    private final ReentrantReadWriteLock updateComponentLock;
+    private UnitConfig loadedUnitConfig;
+    // Variables declaration - do not modify//GEN-BEGIN:variables
+    private javax.swing.JPanel instancePanel;
+    private javax.swing.JLabel jLabel1;
+    private javax.swing.JPanel jPanel4;
+    private javax.swing.JPanel jPanel5;
+    private javax.swing.JPanel jPanel6;
+    private javax.swing.JTabbedPane jTabbedPane1;
+    private javax.swing.JComboBox locationComboBox;
+    private javax.swing.JPanel locationPanel;
+    private javax.swing.JButton scopeApplyButton;
+    private javax.swing.JButton scopeCancelButton;
+    private javax.swing.JTextField scopeTextField;
+    private javax.swing.JPanel servicePanel;
+    private javax.swing.JComboBox serviceTypeComboBox;
+    private javax.swing.JComboBox unitConfigComboBox;
+    private javax.swing.JPanel unitPanel;
+    private javax.swing.JComboBox unitTypeComboBox;
 
     /**
      * Creates new form SelectorPanel
@@ -140,21 +150,22 @@ public class SelectorPanel extends javax.swing.JPanel {
 
     private void initDynamicComponents() {
         // init unit types
-        ArrayList<UnitTypeHolder> unitTypeHolderList = new ArrayList<>();
+        Set<UnitTypeHolder> unitTypeHolderList = new TreeSet<>();
         for (UnitType type : UnitTemplateType.UnitTemplate.UnitType.values()) {
             unitTypeHolderList.add(new UnitTypeHolder(type));
         }
-        Collections.sort(unitTypeHolderList);
+//        Collections.sort(unitTypeHolderList);
+
         SwingUtilities.invokeLater(() -> {
             unitTypeComboBox.setModel(new javax.swing.DefaultComboBoxModel(unitTypeHolderList.toArray()));
         });
 
         // init service types
-        ArrayList<ServiceTypeHolder> serviceTypeHolderList = new ArrayList<>();
+        Set<ServiceTypeHolder> serviceTypeHolderList = new TreeSet<>();
         for (ServiceType type : ServiceType.values()) {
             serviceTypeHolderList.add(new ServiceTypeHolder(type));
         }
-        Collections.sort(unitTypeHolderList);
+//        Collections.sort(unitTypeHolderList);
         SwingUtilities.invokeLater(() -> {
             serviceTypeComboBox.setModel(new javax.swing.DefaultComboBoxModel(serviceTypeHolderList.toArray()));
         });
@@ -193,12 +204,12 @@ public class SelectorPanel extends javax.swing.JPanel {
                 ArrayList<UnitTypeHolder> unitTypeHolderList = new ArrayList<>();
 
                 // apply service type filter if needed
-                if(serviceTypeComboBox.getSelectedItem() != null && !((ServiceTypeHolder) serviceTypeComboBox.getSelectedItem()).isNotSpecified()) {
+                if (serviceTypeComboBox.getSelectedItem() != null && !((ServiceTypeHolder) serviceTypeComboBox.getSelectedItem()).isNotSpecified()) {
                     unitTypeHolderList.add(new UnitTypeHolder(UnitType.UNKNOWN));
                     final ServiceType serviceTypeFilter = ((ServiceTypeHolder) serviceTypeComboBox.getSelectedItem()).getServiceType();
                     for (final UnitTemplate unitTemplate : Registries.getUnitRegistry().getUnitTemplates()) {
                         for (final ServiceDescription serviceDescription : unitTemplate.getServiceDescriptionList()) {
-                            if(serviceDescription.getType() == serviceTypeFilter) {
+                            if (serviceDescription.getType() == serviceTypeFilter) {
                                 unitTypeHolderList.add(new UnitTypeHolder(unitTemplate.getType()));
                                 break;
                             }
@@ -212,7 +223,11 @@ public class SelectorPanel extends javax.swing.JPanel {
 
                 Collections.sort(unitTypeHolderList);
                 SwingUtilities.invokeLater(() -> {
+                    unitTypeComboBox.setEnabled(false);
+                    Object selectedItem = unitTypeComboBox.getSelectedItem();
                     unitTypeComboBox.setModel(new javax.swing.DefaultComboBoxModel(unitTypeHolderList.toArray()));
+                    unitTypeComboBox.setSelectedItem(selectedItem);
+                    unitTypeComboBox.setEnabled(true);
                 });
             } catch (Exception ex) {
                 locationComboBox.setEnabled(false);
@@ -221,10 +236,10 @@ public class SelectorPanel extends javax.swing.JPanel {
 
             // update service types
             try {
-                ArrayList<ServiceTypeHolder> serviceTypeHolderList = new ArrayList<>();
+                Set<ServiceTypeHolder> serviceTypeHolderList = new TreeSet<>();
 
                 // apply unit type filter if needed
-                if(unitTypeComboBox.getSelectedItem() != null && !((UnitTypeHolder)unitTypeComboBox.getSelectedItem()).isNotSpecified()) {
+                if (unitTypeComboBox.getSelectedItem() != null && !((UnitTypeHolder) unitTypeComboBox.getSelectedItem()).isNotSpecified()) {
                     serviceTypeHolderList.add(new ServiceTypeHolder(ServiceType.UNKNOWN));
                     for (final ServiceDescription serviceDescription : Registries.getUnitRegistry().getUnitTemplateByType(((UnitTypeHolder) unitTypeComboBox.getSelectedItem()).getType()).getServiceDescriptionList()) {
                         serviceTypeHolderList.add(new ServiceTypeHolder(serviceDescription.getType()));
@@ -235,9 +250,13 @@ public class SelectorPanel extends javax.swing.JPanel {
                     }
                 }
 
-                Collections.sort(serviceTypeHolderList);
+//                Collections.sort(serviceTypeHolderList);
                 SwingUtilities.invokeLater(() -> {
+                    serviceTypeComboBox.setEnabled(false);
+                    Object selectedItem = serviceTypeComboBox.getSelectedItem();
                     serviceTypeComboBox.setModel(new javax.swing.DefaultComboBoxModel(serviceTypeHolderList.toArray()));
+                    serviceTypeComboBox.setSelectedItem(selectedItem);
+                    serviceTypeComboBox.setEnabled(true);
                 });
             } catch (Exception ex) {
                 locationComboBox.setEnabled(false);
@@ -246,17 +265,15 @@ public class SelectorPanel extends javax.swing.JPanel {
 
             // update location types
             try {
-                ArrayList<LocationUnitConfigHolder> locationConfigHolderList = new ArrayList<>();
+                Set<LocationUnitConfigHolder> locationConfigHolderList = new TreeSet<>();
                 locationConfigHolderList.add(ALL_LOCATION);
                 for (UnitConfig locationUnitConfig : Registries.getLocationRegistry().getLocationConfigs()) {
                     locationConfigHolderList.add(new LocationUnitConfigHolder(locationUnitConfig));
                 }
-                Collections.sort(locationConfigHolderList);
                 locationComboBox.setModel(new DefaultComboBoxModel(locationConfigHolderList.toArray()));
 
-                int selectedLocationIndex = Collections.binarySearch(locationConfigHolderList, selectedLocationConfigHolder);
-                if (selectedLocationIndex >= 0) {
-                    locationComboBox.setSelectedItem(locationConfigHolderList.get(selectedLocationIndex));
+                if(selectedLocationConfigHolder != null) {
+                    locationComboBox.setSelectedItem(selectedLocationConfigHolder);
                 }
 
                 locationComboBox.setEnabled(locationConfigHolderList.size() > 0);
@@ -266,7 +283,7 @@ public class SelectorPanel extends javax.swing.JPanel {
             }
 
             try {
-                ArrayList<UnitConfigHolder> unitConfigHolderList = new ArrayList<>();
+                Set<UnitConfigHolder> unitConfigHolderList = new TreeSet<>();
                 UnitType selectedUnitType = ((UnitTypeHolder) unitTypeComboBox.getSelectedItem()).getType();
                 ServiceType selectedServiceType = ((ServiceTypeHolder) serviceTypeComboBox.getSelectedItem()).getServiceType();
 
@@ -292,7 +309,7 @@ public class SelectorPanel extends javax.swing.JPanel {
 
                     // filter units by selections
                     if (selectedUnitType != UnitType.UNKNOWN) {
-                        if(unitConfig.getType() != selectedUnitType) {
+                        if (unitConfig.getType() != selectedUnitType) {
                             continue;
                         }
                     }
@@ -301,13 +318,13 @@ public class SelectorPanel extends javax.swing.JPanel {
                     if (selectedServiceType != ServiceType.UNKNOWN) {
                         boolean found = false;
                         for (final ServiceConfig serviceConfig : unitConfig.getServiceConfigList()) {
-                            if(serviceConfig.getServiceDescription().getType() == selectedServiceType) {
+                            if (serviceConfig.getServiceDescription().getType() == selectedServiceType) {
                                 found = true;
                                 break;
                             }
                         }
 
-                        if(!found) {
+                        if (!found) {
                             continue;
                         }
                     }
@@ -321,20 +338,15 @@ public class SelectorPanel extends javax.swing.JPanel {
                 }
 
                 // sort units
-                Collections.sort(unitConfigHolderList);
 
                 // setup model
                 unitConfigComboBox.setModel(new DefaultComboBoxModel(unitConfigHolderList.toArray()));
-
                 if (selectedUnitConfigHolder != null) {
-                    int selectedUnitIndex = Collections.binarySearch(unitConfigHolderList, selectedUnitConfigHolder);
-                    if (selectedUnitIndex >= 0) {
-                        unitConfigComboBox.setSelectedItem(unitConfigHolderList.get(selectedUnitIndex));
-                    }
+                    unitConfigComboBox.setSelectedItem(selectedUnitConfigHolder);
                 }
                 unitConfigComboBox.setEnabled(unitConfigHolderList.size() > 0);
 
-                if(selectedUnitType == UnitType.LOCATION) {
+                if (selectedUnitType == UnitType.LOCATION) {
                     locationComboBox.setSelectedIndex(0);
                     locationComboBox.setEnabled(false);
                 }
@@ -361,8 +373,6 @@ public class SelectorPanel extends javax.swing.JPanel {
     public void removeObserver(Observer<UnitConfig> observer) {
         unitConfigObservable.removeObserver(observer);
     }
-
-    private UnitConfig loadedUnitConfig;
 
     private synchronized void updateRemotePanel() {
         if (updateComponentLock.writeLock().tryLock()) {
@@ -448,18 +458,18 @@ public class SelectorPanel extends javax.swing.JPanel {
         javax.swing.GroupLayout unitPanelLayout = new javax.swing.GroupLayout(unitPanel);
         unitPanel.setLayout(unitPanelLayout);
         unitPanelLayout.setHorizontalGroup(
-            unitPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, unitPanelLayout.createSequentialGroup()
-                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-                .addComponent(unitTypeComboBox, javax.swing.GroupLayout.PREFERRED_SIZE, 246, javax.swing.GroupLayout.PREFERRED_SIZE)
-                .addContainerGap())
+                unitPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                        .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, unitPanelLayout.createSequentialGroup()
+                                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                                .addComponent(unitTypeComboBox, javax.swing.GroupLayout.PREFERRED_SIZE, 246, javax.swing.GroupLayout.PREFERRED_SIZE)
+                                .addContainerGap())
         );
         unitPanelLayout.setVerticalGroup(
-            unitPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addGroup(unitPanelLayout.createSequentialGroup()
-                .addContainerGap()
-                .addComponent(unitTypeComboBox, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
-                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+                unitPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                        .addGroup(unitPanelLayout.createSequentialGroup()
+                                .addContainerGap()
+                                .addComponent(unitTypeComboBox, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
         );
 
         locationPanel.setBorder(javax.swing.BorderFactory.createTitledBorder("Location"));
@@ -479,18 +489,18 @@ public class SelectorPanel extends javax.swing.JPanel {
         javax.swing.GroupLayout locationPanelLayout = new javax.swing.GroupLayout(locationPanel);
         locationPanel.setLayout(locationPanelLayout);
         locationPanelLayout.setHorizontalGroup(
-            locationPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addGroup(locationPanelLayout.createSequentialGroup()
-                .addContainerGap()
-                .addComponent(locationComboBox, 0, 244, Short.MAX_VALUE)
-                .addContainerGap())
+                locationPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                        .addGroup(locationPanelLayout.createSequentialGroup()
+                                .addContainerGap()
+                                .addComponent(locationComboBox, 0, 244, Short.MAX_VALUE)
+                                .addContainerGap())
         );
         locationPanelLayout.setVerticalGroup(
-            locationPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, locationPanelLayout.createSequentialGroup()
-                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-                .addComponent(locationComboBox, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
-                .addContainerGap())
+                locationPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                        .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, locationPanelLayout.createSequentialGroup()
+                                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                                .addComponent(locationComboBox, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                                .addContainerGap())
         );
 
         servicePanel.setBorder(javax.swing.BorderFactory.createTitledBorder("Service"));
@@ -498,18 +508,18 @@ public class SelectorPanel extends javax.swing.JPanel {
         javax.swing.GroupLayout servicePanelLayout = new javax.swing.GroupLayout(servicePanel);
         servicePanel.setLayout(servicePanelLayout);
         servicePanelLayout.setHorizontalGroup(
-            servicePanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addGroup(servicePanelLayout.createSequentialGroup()
-                .addContainerGap()
-                .addComponent(serviceTypeComboBox, 0, 256, Short.MAX_VALUE)
-                .addContainerGap())
+                servicePanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                        .addGroup(servicePanelLayout.createSequentialGroup()
+                                .addContainerGap()
+                                .addComponent(serviceTypeComboBox, 0, 256, Short.MAX_VALUE)
+                                .addContainerGap())
         );
         servicePanelLayout.setVerticalGroup(
-            servicePanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, servicePanelLayout.createSequentialGroup()
-                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-                .addComponent(serviceTypeComboBox, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
-                .addContainerGap())
+                servicePanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                        .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, servicePanelLayout.createSequentialGroup()
+                                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                                .addComponent(serviceTypeComboBox, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                                .addContainerGap())
         );
 
         instancePanel.setBorder(javax.swing.BorderFactory.createTitledBorder("Selected Instance"));
@@ -534,48 +544,48 @@ public class SelectorPanel extends javax.swing.JPanel {
         javax.swing.GroupLayout instancePanelLayout = new javax.swing.GroupLayout(instancePanel);
         instancePanel.setLayout(instancePanelLayout);
         instancePanelLayout.setHorizontalGroup(
-            instancePanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addGroup(instancePanelLayout.createSequentialGroup()
-                .addContainerGap()
-                .addComponent(unitConfigComboBox, 0, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-                .addContainerGap())
+                instancePanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                        .addGroup(instancePanelLayout.createSequentialGroup()
+                                .addContainerGap()
+                                .addComponent(unitConfigComboBox, 0, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                                .addContainerGap())
         );
         instancePanelLayout.setVerticalGroup(
-            instancePanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, instancePanelLayout.createSequentialGroup()
-                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-                .addComponent(unitConfigComboBox, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
-                .addContainerGap())
+                instancePanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                        .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, instancePanelLayout.createSequentialGroup()
+                                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                                .addComponent(unitConfigComboBox, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                                .addContainerGap())
         );
 
         javax.swing.GroupLayout jPanel4Layout = new javax.swing.GroupLayout(jPanel4);
         jPanel4.setLayout(jPanel4Layout);
         jPanel4Layout.setHorizontalGroup(
-            jPanel4Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addGroup(jPanel4Layout.createSequentialGroup()
-                .addContainerGap()
-                .addGroup(jPanel4Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING, false)
-                    .addComponent(instancePanel, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-                    .addGroup(jPanel4Layout.createSequentialGroup()
-                        .addComponent(locationPanel, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
-                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                        .addComponent(unitPanel, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
-                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                        .addComponent(servicePanel, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)))
-                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+                jPanel4Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                        .addGroup(jPanel4Layout.createSequentialGroup()
+                                .addContainerGap()
+                                .addGroup(jPanel4Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING, false)
+                                        .addComponent(instancePanel, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                                        .addGroup(jPanel4Layout.createSequentialGroup()
+                                                .addComponent(locationPanel, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                                                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                                                .addComponent(unitPanel, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                                                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                                                .addComponent(servicePanel, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)))
+                                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
         );
         jPanel4Layout.setVerticalGroup(
-            jPanel4Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, jPanel4Layout.createSequentialGroup()
-                .addContainerGap()
-                .addGroup(jPanel4Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                    .addGroup(jPanel4Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING, false)
-                        .addComponent(unitPanel, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-                        .addComponent(locationPanel, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
-                    .addComponent(servicePanel, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))
-                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                .addComponent(instancePanel, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
-                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+                jPanel4Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                        .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, jPanel4Layout.createSequentialGroup()
+                                .addContainerGap()
+                                .addGroup(jPanel4Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                                        .addGroup(jPanel4Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING, false)
+                                                .addComponent(unitPanel, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                                                .addComponent(locationPanel, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+                                        .addComponent(servicePanel, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))
+                                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                                .addComponent(instancePanel, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
         );
 
         jTabbedPane1.addTab("Registry", jPanel4);
@@ -594,6 +604,7 @@ public class SelectorPanel extends javax.swing.JPanel {
         scopeTextField.addInputMethodListener(new java.awt.event.InputMethodListener() {
             public void inputMethodTextChanged(java.awt.event.InputMethodEvent evt) {
             }
+
             public void caretPositionChanged(java.awt.event.InputMethodEvent evt) {
                 scopeTextFieldCaretPositionChanged(evt);
             }
@@ -607,6 +618,7 @@ public class SelectorPanel extends javax.swing.JPanel {
             public void keyTyped(java.awt.event.KeyEvent evt) {
                 scopeTextFieldKeyTyped(evt);
             }
+
             public void keyReleased(java.awt.event.KeyEvent evt) {
                 scopeTextFieldKeyReleased(evt);
             }
@@ -629,33 +641,33 @@ public class SelectorPanel extends javax.swing.JPanel {
         javax.swing.GroupLayout jPanel6Layout = new javax.swing.GroupLayout(jPanel6);
         jPanel6.setLayout(jPanel6Layout);
         jPanel6Layout.setHorizontalGroup(
-            jPanel6Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addGroup(jPanel6Layout.createSequentialGroup()
-                .addContainerGap()
-                .addGroup(jPanel6Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                    .addGroup(jPanel6Layout.createSequentialGroup()
-                        .addComponent(jLabel1)
-                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                        .addComponent(scopeTextField, javax.swing.GroupLayout.DEFAULT_SIZE, 819, Short.MAX_VALUE))
-                    .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, jPanel6Layout.createSequentialGroup()
-                        .addGap(0, 0, Short.MAX_VALUE)
-                        .addComponent(scopeCancelButton)
-                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                        .addComponent(scopeApplyButton)))
-                .addContainerGap())
+                jPanel6Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                        .addGroup(jPanel6Layout.createSequentialGroup()
+                                .addContainerGap()
+                                .addGroup(jPanel6Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                                        .addGroup(jPanel6Layout.createSequentialGroup()
+                                                .addComponent(jLabel1)
+                                                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                                                .addComponent(scopeTextField, javax.swing.GroupLayout.DEFAULT_SIZE, 819, Short.MAX_VALUE))
+                                        .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, jPanel6Layout.createSequentialGroup()
+                                                .addGap(0, 0, Short.MAX_VALUE)
+                                                .addComponent(scopeCancelButton)
+                                                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                                                .addComponent(scopeApplyButton)))
+                                .addContainerGap())
         );
         jPanel6Layout.setVerticalGroup(
-            jPanel6Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addGroup(jPanel6Layout.createSequentialGroup()
-                .addContainerGap()
-                .addGroup(jPanel6Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
-                    .addComponent(jLabel1)
-                    .addComponent(scopeTextField, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))
-                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
-                .addGroup(jPanel6Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
-                    .addComponent(scopeApplyButton)
-                    .addComponent(scopeCancelButton))
-                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+                jPanel6Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                        .addGroup(jPanel6Layout.createSequentialGroup()
+                                .addContainerGap()
+                                .addGroup(jPanel6Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
+                                        .addComponent(jLabel1)
+                                        .addComponent(scopeTextField, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))
+                                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
+                                .addGroup(jPanel6Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
+                                        .addComponent(scopeApplyButton)
+                                        .addComponent(scopeCancelButton))
+                                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
         );
 
         jPanel5.add(jPanel6);
@@ -665,17 +677,19 @@ public class SelectorPanel extends javax.swing.JPanel {
         javax.swing.GroupLayout layout = new javax.swing.GroupLayout(this);
         this.setLayout(layout);
         layout.setHorizontalGroup(
-            layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addComponent(jTabbedPane1)
+                layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                        .addComponent(jTabbedPane1)
         );
         layout.setVerticalGroup(
-            layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addComponent(jTabbedPane1, javax.swing.GroupLayout.Alignment.TRAILING, javax.swing.GroupLayout.PREFERRED_SIZE, 195, javax.swing.GroupLayout.PREFERRED_SIZE)
+                layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                        .addComponent(jTabbedPane1, javax.swing.GroupLayout.Alignment.TRAILING, javax.swing.GroupLayout.PREFERRED_SIZE, 195, javax.swing.GroupLayout.PREFERRED_SIZE)
         );
     }// </editor-fold>//GEN-END:initComponents
 
     private void unitTypeComboBoxActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_unitTypeComboBoxActionPerformed
-        updateDynamicComponents();
+        if (unitTypeComboBox.isEnabled()) {
+            updateDynamicComponents();
+        }
     }//GEN-LAST:event_unitTypeComboBoxActionPerformed
 
     private void scopeCancelButtonActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_scopeCancelButtonActionPerformed
@@ -694,7 +708,9 @@ public class SelectorPanel extends javax.swing.JPanel {
     }//GEN-LAST:event_scopeTextFieldActionPerformed
 
     private void serviceTypeComboBoxActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_serviceTypeComboBoxActionPerformed
-        updateDynamicComponents();
+        if (serviceTypeComboBox.isEnabled()) {
+            updateDynamicComponents();
+        }
     }//GEN-LAST:event_serviceTypeComboBoxActionPerformed
 
     private void locationComboBoxActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_locationComboBoxActionPerformed
@@ -743,6 +759,7 @@ public class SelectorPanel extends javax.swing.JPanel {
         scopeTextField.setText(scopeTextField.getText().toLowerCase());
         updateButtonStates();
     }//GEN-LAST:event_scopeTextFieldFocusLost
+    // End of variables declaration//GEN-END:variables
 
     private void unitConfigComboBoxPropertyChange(java.beans.PropertyChangeEvent evt) {//GEN-FIRST:event_unitConfigComboBoxPropertyChange
         if (evt.getPropertyName().equals("model")) {
@@ -792,36 +809,11 @@ public class SelectorPanel extends javax.swing.JPanel {
         }
     }
 
-    // Variables declaration - do not modify//GEN-BEGIN:variables
-    private javax.swing.JPanel instancePanel;
-    private javax.swing.JLabel jLabel1;
-    private javax.swing.JPanel jPanel4;
-    private javax.swing.JPanel jPanel5;
-    private javax.swing.JPanel jPanel6;
-    private javax.swing.JTabbedPane jTabbedPane1;
-    private javax.swing.JComboBox locationComboBox;
-    private javax.swing.JPanel locationPanel;
-    private javax.swing.JButton scopeApplyButton;
-    private javax.swing.JButton scopeCancelButton;
-    private javax.swing.JTextField scopeTextField;
-    private javax.swing.JPanel servicePanel;
-    private javax.swing.JComboBox serviceTypeComboBox;
-    private javax.swing.JComboBox unitConfigComboBox;
-    private javax.swing.JPanel unitPanel;
-    private javax.swing.JComboBox unitTypeComboBox;
-    // End of variables declaration//GEN-END:variables
-
-    public final static LocationUnitConfigHolder ALL_LOCATION = new LocationUnitConfigHolder(null);
-    public final static UnitConfigHolder ALL_UNIT = new UnitConfigHolder(null, null);
-    public final static ServiceTypeHolder ALL_Service = new ServiceTypeHolder(ServiceType.UNKNOWN);
-
     public static class LocationUnitConfigHolder implements Comparable<LocationUnitConfigHolder> {
 
         private final UnitConfig locationUnitConfig;
 
-        public
-
-        LocationUnitConfigHolder(UnitConfig locationUnitConfig) {
+        public LocationUnitConfigHolder(UnitConfig locationUnitConfig) {
             this.locationUnitConfig = locationUnitConfig;
         }
 
@@ -855,6 +847,30 @@ public class SelectorPanel extends javax.swing.JPanel {
             }
 
             return toString().compareTo(o.toString());
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (obj == null) {
+                return false;
+            }
+            if (obj == this) {
+                return true;
+            }
+            if (obj.getClass() != getClass()) {
+                return false;
+            }
+            LocationUnitConfigHolder instance = (LocationUnitConfigHolder) obj;
+            return new EqualsBuilder()
+                    .append(locationUnitConfig.getId(), instance.locationUnitConfig.getId())
+                    .isEquals();
+        }
+
+        @Override
+        public int hashCode() {
+            return new HashCodeBuilder(17, 37).
+                    append(locationUnitConfig.getId()).
+                    toHashCode();
         }
     }
 
@@ -896,6 +912,30 @@ public class SelectorPanel extends javax.swing.JPanel {
             }
 
             return toString().compareTo(o.toString());
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (obj == null) {
+                return false;
+            }
+            if (obj == this) {
+                return true;
+            }
+            if (obj.getClass() != getClass()) {
+                return false;
+            }
+            UnitTypeHolder instance = (UnitTypeHolder) obj;
+            return new EqualsBuilder()
+                    .append(type, instance.type)
+                    .isEquals();
+        }
+
+        @Override
+        public int hashCode() {
+            return new HashCodeBuilder(17, 37).
+                    append(type).
+                    toHashCode();
         }
     }
 
@@ -952,6 +992,30 @@ public class SelectorPanel extends javax.swing.JPanel {
 
             return toString().compareTo(o.toString());
         }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (obj == null) {
+                return false;
+            }
+            if (obj == this) {
+                return true;
+            }
+            if (obj.getClass() != getClass()) {
+                return false;
+            }
+            ServiceTypeHolder instance = (ServiceTypeHolder) obj;
+            return new EqualsBuilder()
+                    .append(type, instance.type)
+                    .isEquals();
+        }
+
+        @Override
+        public int hashCode() {
+            return new HashCodeBuilder(17, 37).
+                    append(type).
+                    toHashCode();
+        }
     }
 
     public static class UnitConfigHolder implements Comparable<UnitConfigHolder> {
@@ -991,5 +1055,28 @@ public class SelectorPanel extends javax.swing.JPanel {
             return toString().compareTo(o.toString());
         }
 
+        @Override
+        public boolean equals(Object obj) {
+            if (obj == null) {
+                return false;
+            }
+            if (obj == this) {
+                return true;
+            }
+            if (obj.getClass() != getClass()) {
+                return false;
+            }
+            UnitConfigHolder instance = (UnitConfigHolder) obj;
+            return new EqualsBuilder()
+                    .append(config.getId(), instance.config.getId())
+                    .isEquals();
+        }
+
+        @Override
+        public int hashCode() {
+            return new HashCodeBuilder(17, 37).
+                    append(config.getId()).
+                    toHashCode();
+        }
     }
 }
