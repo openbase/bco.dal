@@ -227,10 +227,10 @@ public class SelectorPanel extends javax.swing.JPanel {
                     Object selectedItem = unitTypeComboBox.getSelectedItem();
                     unitTypeComboBox.setModel(new javax.swing.DefaultComboBoxModel(unitTypeHolderList.toArray()));
                     unitTypeComboBox.setSelectedItem(selectedItem);
-                    unitTypeComboBox.setEnabled(true);
+                    unitTypeComboBox.setEnabled(unitTypeComboBox.getItemCount() > 1);
                 });
             } catch (Exception ex) {
-                locationComboBox.setEnabled(false);
+                unitTypeComboBox.setEnabled(false);
                 ExceptionPrinter.printHistory(ex, logger);
             }
 
@@ -256,7 +256,7 @@ public class SelectorPanel extends javax.swing.JPanel {
                     Object selectedItem = serviceTypeComboBox.getSelectedItem();
                     serviceTypeComboBox.setModel(new javax.swing.DefaultComboBoxModel(serviceTypeHolderList.toArray()));
                     serviceTypeComboBox.setSelectedItem(selectedItem);
-                    serviceTypeComboBox.setEnabled(true);
+                    serviceTypeComboBox.setEnabled(serviceTypeComboBox.getItemCount() > 1);
                 });
             } catch (Exception ex) {
                 locationComboBox.setEnabled(false);
@@ -270,13 +270,20 @@ public class SelectorPanel extends javax.swing.JPanel {
                 for (UnitConfig locationUnitConfig : Registries.getLocationRegistry().getLocationConfigs()) {
                     locationConfigHolderList.add(new LocationUnitConfigHolder(locationUnitConfig));
                 }
-                locationComboBox.setModel(new DefaultComboBoxModel(locationConfigHolderList.toArray()));
 
-                if(selectedLocationConfigHolder != null) {
+                SwingUtilities.invokeLater(() -> {
+                    locationComboBox.setEnabled(false);
+                    locationComboBox.setModel(new DefaultComboBoxModel(locationConfigHolderList.toArray()));
                     locationComboBox.setSelectedItem(selectedLocationConfigHolder);
-                }
+                    locationComboBox.setEnabled(locationComboBox.getItemCount() > 1);
+                });
 
-                locationComboBox.setEnabled(locationConfigHolderList.size() > 0);
+
+//                if(selectedLocationConfigHolder != null) {
+////                    locationComboBox.setSelectedItem(selectedLocationConfigHolder);
+//                }
+//
+//                locationComboBox.setEnabled(locationConfigHolderList.size() > 1);
             } catch (CouldNotPerformException ex) {
                 locationComboBox.setEnabled(false);
                 ExceptionPrinter.printHistory(ex, logger);
@@ -355,7 +362,7 @@ public class SelectorPanel extends javax.swing.JPanel {
                 throw ex;
             }
             updateRemotePanel();
-            MultiException.checkAndThrow("Could not acquire all informations!", exceptionStack);
+            MultiException.checkAndThrow("Could not acquire all information!", exceptionStack);
         } catch (CouldNotPerformException | NullPointerException ex) {
             ExceptionPrinter.printHistory(new CouldNotPerformException("Could not update all dynamic components!", ex), logger);
         } catch (InterruptedException ex) {
@@ -714,11 +721,15 @@ public class SelectorPanel extends javax.swing.JPanel {
     }//GEN-LAST:event_serviceTypeComboBoxActionPerformed
 
     private void locationComboBoxActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_locationComboBoxActionPerformed
-        updateDynamicComponents();
+        if (locationComboBox.isEnabled()) {
+            updateDynamicComponents();
+        }
     }//GEN-LAST:event_locationComboBoxActionPerformed
 
     private void unitConfigComboBoxActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_unitConfigComboBoxActionPerformed
-        updateRemotePanel();
+        if (unitConfigComboBox.isEnabled()) {
+            updateRemotePanel();
+        }
     }//GEN-LAST:event_unitConfigComboBoxActionPerformed
 
     private void scopeApplyButtonActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_scopeApplyButtonActionPerformed
@@ -813,7 +824,7 @@ public class SelectorPanel extends javax.swing.JPanel {
 
         private final UnitConfig locationUnitConfig;
 
-        public LocationUnitConfigHolder(UnitConfig locationUnitConfig) {
+        public LocationUnitConfigHolder(final UnitConfig locationUnitConfig) {
             this.locationUnitConfig = locationUnitConfig;
         }
 
@@ -861,6 +872,15 @@ public class SelectorPanel extends javax.swing.JPanel {
                 return false;
             }
             LocationUnitConfigHolder instance = (LocationUnitConfigHolder) obj;
+
+            // handle ALL entry
+            if(locationUnitConfig == null && instance.locationUnitConfig == null) {
+                return true;
+            }
+            if(locationUnitConfig == null || instance.locationUnitConfig == null) {
+                return super.equals(obj);
+            }
+
             return new EqualsBuilder()
                     .append(locationUnitConfig.getId(), instance.locationUnitConfig.getId())
                     .isEquals();
@@ -868,6 +888,12 @@ public class SelectorPanel extends javax.swing.JPanel {
 
         @Override
         public int hashCode() {
+
+            // filter all entry location
+            if(locationUnitConfig == null) {
+                return super.hashCode();
+            }
+
             return new HashCodeBuilder(17, 37).
                     append(locationUnitConfig.getId()).
                     toHashCode();

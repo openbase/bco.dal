@@ -69,7 +69,7 @@ public class GenericUnitPanel<RS extends AbstractUnitRemote> extends UnitRemoteV
     private StatusPanel statusPanel;
 
     /**
-     * Creates new form AmbientLightView
+     * Creates new form GenericUnitPanel
      */
     public GenericUnitPanel() {
         super();
@@ -147,16 +147,13 @@ public class GenericUnitPanel<RS extends AbstractUnitRemote> extends UnitRemoteV
                 case CONNECTING:
                     textColor = Color.ORANGE.darker();
                     textSuffix = "waiting for connection...";
-                    GlobalCachedExecutorService.submit(new Runnable() {
-                        @Override
-                        public void run() {
-                            try {
-                                statusPanel.setStatus("Waiting for " + StringProcessor.transformUpperCaseToCamelCase(getRemoteService().getUnitType().name()) + " connection...", StatusType.INFO, true);
-                                getRemoteService().waitForConnectionState(ConnectionState.CONNECTED);
-                                statusPanel.setStatus("Connection to " + StringProcessor.transformUpperCaseToCamelCase(getRemoteService().getUnitType().name()) + " established.", StatusType.INFO, 3);
-                            } catch (CouldNotPerformException | InterruptedException ex) {
-                                statusPanel.setError(ex);
-                            }
+                    GlobalCachedExecutorService.submit(() -> {
+                        try {
+                            statusPanel.setStatus("Waiting for " + StringProcessor.transformUpperCaseToCamelCase(getRemoteService().getUnitType().name()) + " connection...", StatusType.INFO, true);
+                            getRemoteService().waitForConnectionState(ConnectionState.CONNECTED);
+                            statusPanel.setStatus("Connection to " + StringProcessor.transformUpperCaseToCamelCase(getRemoteService().getUnitType().name()) + " established.", StatusType.INFO, 3);
+                        } catch (CouldNotPerformException | InterruptedException ex) {
+                            statusPanel.setError(ex);
                         }
                     });
                     break;
@@ -170,7 +167,6 @@ public class GenericUnitPanel<RS extends AbstractUnitRemote> extends UnitRemoteV
                     break;
             }
 
-//            TitledBorder titledBorder = BorderFactory.createTitledBorder(StringProcessor.transformUpperCaseToCamelCase(getRemoteService().getType().name()) + ":" + getRemoteService().getId() + " [" + textSuffix + "]");
             TitledBorder titledBorder = BorderFactory.createTitledBorder(remoteLabel + " (" + textSuffix + ")");
             titledBorder.setTitleColor(textColor);
             setBorder(titledBorder);
@@ -291,6 +287,8 @@ public class GenericUnitPanel<RS extends AbstractUnitRemote> extends UnitRemoteV
         String remoteClassName = AbstractServicePanel.class.getPackage().getName() + "." + StringProcessor.transformUpperCaseToCamelCase(serviceType.name()) + SERVICE_PANEL_SUFFIX;
         try {
             return (Class<? extends AbstractServicePanel>) getClass().getClassLoader().loadClass(remoteClassName);
+        } catch (ClassNotFoundException ex) {
+            throw new CouldNotPerformException("Service[" + serviceType.name() + "] not supported yet!");
         } catch (Exception ex) {
             throw new CouldNotPerformException("Could not detect service panel class for ServiceType[" + serviceType.name() + "]", ex);
         }
