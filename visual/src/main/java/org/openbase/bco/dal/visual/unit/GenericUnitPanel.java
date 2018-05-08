@@ -21,7 +21,6 @@ package org.openbase.bco.dal.visual.unit;
  * <http://www.gnu.org/licenses/gpl-3.0.html>.
  * #L%
  */
-
 import com.google.protobuf.GeneratedMessage;
 import org.openbase.bco.dal.lib.layer.unit.UnitRemote;
 import org.openbase.bco.dal.remote.unit.AbstractUnitRemote;
@@ -35,24 +34,22 @@ import org.openbase.jul.exception.CouldNotPerformException;
 import org.openbase.jul.exception.NotAvailableException;
 import org.openbase.jul.exception.printer.ExceptionPrinter;
 import org.openbase.jul.exception.printer.LogLevel;
-import org.openbase.jul.extension.rsb.scope.ScopeGenerator;
 import org.openbase.jul.pattern.Observable;
 import org.openbase.jul.pattern.Observer;
 import org.openbase.jul.pattern.Remote.ConnectionState;
 import org.openbase.jul.processing.StringProcessor;
 import org.openbase.jul.schedule.GlobalCachedExecutorService;
-import org.openbase.jul.visual.swing.layout.LayoutGenerator;
 import rst.domotic.service.ServiceConfigType.ServiceConfig;
 import rst.domotic.service.ServiceTemplateType.ServiceTemplate.ServicePattern;
 import rst.domotic.service.ServiceTemplateType.ServiceTemplate.ServiceType;
 import rst.domotic.unit.UnitConfigType.UnitConfig;
+import rst.domotic.unit.UnitTemplateType.UnitTemplate.UnitType;
 
 import javax.swing.*;
 import javax.swing.border.TitledBorder;
 import java.awt.*;
 import java.lang.reflect.InvocationTargetException;
 import java.util.*;
-import java.util.List;
 
 import static org.openbase.bco.dal.visual.service.AbstractServicePanel.SERVICE_PANEL_SUFFIX;
 
@@ -65,7 +62,7 @@ public class GenericUnitPanel<RS extends AbstractUnitRemote> extends UnitRemoteV
     private final Observer<UnitConfig> unitConfigObserver;
     private final Observer<ConnectionState> connectionStateObserver;
     private boolean autoRemove;
-    private List<JComponent> componentList;
+    private final Map<AbstractServicePanel, JPanel> servicePanelMap;
     private StatusPanel statusPanel;
 
     /**
@@ -92,7 +89,7 @@ public class GenericUnitPanel<RS extends AbstractUnitRemote> extends UnitRemoteV
         };
         initComponents();
         autoRemove = true;
-        componentList = new ArrayList<>();
+        servicePanelMap = new HashMap<>();
     }
 
     public void setAutoRemove(boolean autoRemove) {
@@ -189,14 +186,13 @@ public class GenericUnitPanel<RS extends AbstractUnitRemote> extends UnitRemoteV
             }
 
             // remove observer from service panels
-            for (final JComponent component : componentList) {
-                if (component instanceof JPanel) {
-                    final JPanel jPanel = (JPanel) component;
-                    if (jPanel.getComponent(0) instanceof AbstractServicePanel) {
-                        ((AbstractServicePanel) jPanel.getComponent(0)).shutdown();
-                    }
-                }
+            for (final Map.Entry<AbstractServicePanel, JPanel> entry : servicePanelMap.entrySet()) {
+                entry.getKey().shutdown();
+                entry.getValue().removeAll();
             }
+
+            // clear service panels
+            servicePanelMap.clear();
 
             UnitRemote unitRemote = setUnitRemote(unitConfig);
             unitRemote.addConnectionStateObserver(connectionStateObserver);
@@ -204,9 +200,15 @@ public class GenericUnitPanel<RS extends AbstractUnitRemote> extends UnitRemoteV
             if (autoRemove) {
                 contextPanel.removeAll();
             }
-            componentList = new ArrayList<>();
-            JPanel servicePanel;
-            HashMap<ServiceType, AbstractServicePanel> servicePanelMap = new HashMap<>();
+            final HashMap<ServiceType, AbstractServicePanel> servicePanelTypeMap = new HashMap<>();
+
+            // precompute location supported services
+            final Set<ServiceType> locationSupportedServiceConfigList;
+            if (unitConfig.getType() == UnitType.LOCATION) {
+                locationSupportedServiceConfigList = Registries.getLocationRegistry().getServiceTypesByLocation(unitConfig.getId());
+            } else {
+                locationSupportedServiceConfigList = null;
+            }
 
             for (ServiceConfig serviceConfig : unitConfig.getServiceConfigList()) {
                 try {
@@ -221,45 +223,73 @@ public class GenericUnitPanel<RS extends AbstractUnitRemote> extends UnitRemoteV
                         continue;
                     }
 
+                    // apply location type filter if needed
+                    if (locationSupportedServiceConfigList != null && !locationSupportedServiceConfigList.contains(serviceConfig.getServiceDescription().getType())) {
+                        continue;
+                    }
+
                     // check if service type is already selected.
-                    if (!servicePanelMap.containsKey(serviceConfig.getServiceDescription().getType())) {
+                    if (!servicePanelTypeMap.containsKey(serviceConfig.getServiceDescription().getType())) {
                         try {
-                            servicePanel = new JPanel();
-                            servicePanel.setBorder(javax.swing.BorderFactory.createTitledBorder(StringProcessor.transformUpperCaseToCamelCase(serviceConfig.getServiceDescription().getType().name()) + " " + ScopeGenerator.generateStringRep(unitConfig.getScope())));
+                            final JPanel serviceParentPanel = new JPanel();
+                            serviceParentPanel.setBorder(javax.swing.BorderFactory.createTitledBorder(StringProcessor.transformUpperCaseToCamelCase(serviceConfig.getServiceDescription().getType().name())));
+                            serviceParentPanel.setLayout(new BorderLayout());
                             AbstractServicePanel abstractServicePanel = instantiatServicePanel(serviceConfig, loadServicePanelClass(serviceConfig.getServiceDescription().getType()), getRemoteService());
                             abstractServicePanel.setUnitId(unitConfig.getId());
                             abstractServicePanel.setServiceType(serviceConfig.getServiceDescription().getType());
-                            servicePanel.add(abstractServicePanel);
-                            servicePanelMap.put(serviceConfig.getServiceDescription().getType(), abstractServicePanel);
-                            componentList.add(servicePanel);
+                            serviceParentPanel.add(abstractServicePanel, BorderLayout.CENTER);
+                            servicePanelTypeMap.put(serviceConfig.getServiceDescription().getType(), abstractServicePanel);
+                            servicePanelMap.put(abstractServicePanel, serviceParentPanel);
                         } catch (CouldNotPerformException ex) {
                             ExceptionPrinter.printHistory(new CouldNotPerformException("Could not load service panel for ServiceType[" + serviceConfig.getServiceDescription().getType().name() + "]", ex), logger, LogLevel.ERROR);
                         }
                     }
 
                     // bind service
-                    if (!servicePanelMap.containsKey(serviceConfig.getServiceDescription().getType())) {
+                    if (!servicePanelTypeMap.containsKey(serviceConfig.getServiceDescription().getType())) {
                         logger.error("Skip Service[" + serviceConfig.getServiceDescription().getType() + "] binding because no related service panel registered!");
                         continue;
                     }
-                    servicePanelMap.get(serviceConfig.getServiceDescription().getType()).bindServiceConfig(serviceConfig);
+                    servicePanelTypeMap.get(serviceConfig.getServiceDescription().getType()).bindServiceConfig(serviceConfig);
                 } catch (CouldNotPerformException | NullPointerException ex) {
                     ExceptionPrinter.printHistory(new CouldNotPerformException("Could not configure service panel for ServiceType[" + serviceConfig.getServiceDescription().getType().name() + "]", ex), logger, LogLevel.ERROR);
                 }
             }
-            Set<ServiceType> serviceTypeSet = new HashSet<>();
-            for (ServiceConfig serviceConfig : unitConfig.getServiceConfigList()) {
+            final Set<ServiceType> serviceTypeSet = new HashSet<>();
+            for (final ServiceConfig serviceConfig : unitConfig.getServiceConfigList()) {
                 if (!serviceTypeSet.contains(serviceConfig.getServiceDescription().getType())) {
                     serviceTypeSet.add(serviceConfig.getServiceDescription().getType());
-                    if (!servicePanelMap.containsKey(serviceConfig.getServiceDescription().getType())) {
+                    if (!servicePanelTypeMap.containsKey(serviceConfig.getServiceDescription().getType())) {
                         logger.error("Skip Service[" + serviceConfig.getServiceDescription().getType() + "] activation because no related service panel registered!");
                         continue;
                     }
-                    servicePanelMap.get(serviceConfig.getServiceDescription().getType()).initObserver();
+                    servicePanelTypeMap.get(serviceConfig.getServiceDescription().getType()).initObserver();
                 }
             }
 
-            LayoutGenerator.generateHorizontalLayout(contextPanel, componentList);
+//            LayoutGenerator.generateHorizontalLayout(contextPanel, componentList);
+            final GridBagLayout layout = new GridBagLayout();
+            contextPanel.setLayout(layout);
+            
+            
+            grid = new boolean[8][100];
+            
+            // sort by service panel grid mass so the largest service panels are added first.
+            ArrayList<Map.Entry<AbstractServicePanel, JPanel>> entryList = new ArrayList<>(servicePanelMap.entrySet());
+            Collections.sort(entryList, new Comparator<Map.Entry<AbstractServicePanel, JPanel>>() {
+                @Override
+                public int compare(Map.Entry<AbstractServicePanel, JPanel> o1, Map.Entry<AbstractServicePanel, JPanel> o2) {
+                     return Integer.compare(o2.getKey().getGridMass(), o1.getKey().getGridMass());
+                }
+            });
+            
+            // add service panels
+            for (final Map.Entry<AbstractServicePanel, JPanel> entry : entryList) {
+                final AbstractServicePanel servicePanel = entry.getKey();
+                addServicePanel(contextPanel, layout, entry.getValue(), servicePanel, getSlot(servicePanel.getGridWidth(), servicePanel.getGridHeight()));
+            }
+            
+            // revalidate after modification
             contextPanel.validate();
             contextPanel.revalidate();
             contextScrollPane.validate();
@@ -268,6 +298,94 @@ public class GenericUnitPanel<RS extends AbstractUnitRemote> extends UnitRemoteV
             revalidate();
         } catch (CouldNotPerformException | NullPointerException ex) {
             ExceptionPrinter.printHistory(new CouldNotPerformException("Could not update config for unit panel!", ex), logger);
+        }
+    }
+
+    private static void addServicePanel(final Container parentPanel, final GridBagLayout layout, final JPanel servicePanelParent, final AbstractServicePanel servicePanel, final Pos2D pos) {
+        final GridBagConstraints constraints = new GridBagConstraints();
+        constraints.fill = GridBagConstraints.BOTH;
+        System.out.println("register "+servicePanel.getClass().getSimpleName()+" add (" + pos.x + "," + pos.y + ")");
+        constraints.gridx = pos.x;
+        constraints.gridy = pos.y;
+        constraints.gridwidth = servicePanel.getGridWidth();
+        constraints.gridheight = servicePanel.getGridHeight();
+        constraints.weightx = 1;
+        constraints.weighty = 1;
+        constraints.insets = new Insets(5, 5, 5, 5);
+//        constraints
+        layout.setConstraints(servicePanelParent, constraints);
+        parentPanel.add(servicePanelParent);
+    }
+
+    private boolean[][] grid;
+
+    private Pos2D getSlot(int width, int height) throws CouldNotPerformException {
+//        System.out.println("===========================");
+//        System.out.println("find slot for (" + width + "," + height + ")");
+        printGrid();
+        for (int y = 0; y < grid[0].length; y++) {
+            for (int x = 0; x < grid.length; x++) {
+                if (blockSlot(x, y, width, height)) {
+//                    System.out.println("found slof at (" + x + "," + y + ") with (" + width + "," + height + ")");
+                    printGrid();
+                    return new Pos2D(x, y);
+                }
+            }
+        }
+        throw new CouldNotPerformException("Could not find a free spot on grid!");
+    }
+
+    private void printGrid() {
+        for (int y = 0; y < grid[0].length; y++) {
+            for (int x = 0; x < grid.length; x++) {
+                if (grid[x][y]) {
+                    System.out.print("[x]");
+                } else {
+                    System.out.print("[ ]");
+                }
+            }
+            System.out.println();
+        }
+    }
+
+    private boolean blockSlot(int x, int y, int width, int height) {
+
+        // validate size
+        if (x + width > grid.length) {
+            return false;
+        }
+        if (y + height > grid[0].length) {
+            return false;
+        }
+
+        // check if slot is free
+        for (int xx = x; xx < x + width; xx++) {
+            for (int yy = y; yy < y + height; yy++) {
+//                System.out.println("check (" + xx + "," + yy + ") = " + grid[xx][yy]);
+                if (grid[xx][yy]) {
+                    return false;
+                }
+            }
+        }
+
+        // block slot
+        for (int xx = x; xx < x + width; xx++) {
+            for (int yy = y; yy < y + height; yy++) {
+//                System.out.println("block (" + xx + "," + yy + ")");
+                grid[xx][yy] = true;
+            }
+        }
+        return true;
+    }
+
+    static class Pos2D {
+
+        public int x;
+        public int y;
+
+        public Pos2D(int x, int y) {
+            this.x = x;
+            this.y = y;
         }
     }
 
@@ -306,14 +424,10 @@ public class GenericUnitPanel<RS extends AbstractUnitRemote> extends UnitRemoteV
 
     @Override
     protected void updateDynamicComponents(GeneratedMessage data) {
-
-//               remoteView.setEnabled(false);
-//        remoteView.setUnitConfig(unitConfig);
-//        remoteView.setEnabled(true);
     }
 
-    public List<JComponent> getComponentList() {
-        return componentList;
+    public Collection<? extends JComponent> getComponentList() {
+        return servicePanelMap.keySet();
     }
 
     /**
@@ -332,28 +446,18 @@ public class GenericUnitPanel<RS extends AbstractUnitRemote> extends UnitRemoteV
 
         contextScrollPane.setBorder(null);
 
-        javax.swing.GroupLayout contextPanelLayout = new javax.swing.GroupLayout(contextPanel);
-        contextPanel.setLayout(contextPanelLayout);
-        contextPanelLayout.setHorizontalGroup(
-                contextPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                        .addGap(0, 490, Short.MAX_VALUE)
-        );
-        contextPanelLayout.setVerticalGroup(
-                contextPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                        .addGap(0, 469, Short.MAX_VALUE)
-        );
-
+        contextPanel.setLayout(new java.awt.GridLayout());
         contextScrollPane.setViewportView(contextPanel);
 
         javax.swing.GroupLayout layout = new javax.swing.GroupLayout(this);
         this.setLayout(layout);
         layout.setHorizontalGroup(
-                layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                        .addComponent(contextScrollPane, javax.swing.GroupLayout.DEFAULT_SIZE, 170, Short.MAX_VALUE)
+            layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addComponent(contextScrollPane, javax.swing.GroupLayout.DEFAULT_SIZE, 147, Short.MAX_VALUE)
         );
         layout.setVerticalGroup(
-                layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                        .addComponent(contextScrollPane, javax.swing.GroupLayout.DEFAULT_SIZE, 173, Short.MAX_VALUE)
+            layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addComponent(contextScrollPane, javax.swing.GroupLayout.DEFAULT_SIZE, 135, Short.MAX_VALUE)
         );
     }// </editor-fold>//GEN-END:initComponents
 

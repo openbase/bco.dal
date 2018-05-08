@@ -310,6 +310,19 @@ public abstract class AbstractServicePanel<PS extends ProviderService, CS extend
         );
     }// </editor-fold>//GEN-END:initComponents
 
+    public int getGridWidth() {
+        return 2;
+    }
+    
+    public int getGridHeight() {
+        return 1;
+    }
+    
+    public int getGridMass() {
+        return getGridWidth() * getGridHeight();
+    }
+
+
     // Variables declaration - do not modify//GEN-BEGIN:variables
     // End of variables declaration//GEN-END:variables
 }

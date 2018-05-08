@@ -157,6 +157,15 @@ public class ColorStateServicePanel extends AbstractServicePanel<ColorStateProvi
         }
     }//GEN-LAST:event_neutralWhiteButtonActionPerformed
 
+    @Override
+    public int getGridWidth() {
+        return 4;
+    }
+    
+    @Override
+    public int getGridHeight() {
+        return 4;
+    }
 
     // Variables declaration - do not modify//GEN-BEGIN:variables
     private javax.swing.JColorChooser colorChooser;

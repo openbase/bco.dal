@@ -10,18 +10,17 @@ package org.openbase.bco.dal.visual.util;
  * it under the terms of the GNU General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
- *
+ * 
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- *
+ * 
  * You should have received a copy of the GNU General Public
  * License along with this program.  If not, see
  * <http://www.gnu.org/licenses/gpl-3.0.html>.
  * #L%
  */
-
 import org.apache.commons.lang.builder.EqualsBuilder;
 import org.apache.commons.lang.builder.HashCodeBuilder;
 import org.openbase.bco.registry.remote.Registries;
@@ -75,7 +74,7 @@ public class SelectorPanel extends javax.swing.JPanel {
     private boolean init = false;
     private Future currentTask;
     private UnitConfig loadedUnitConfig;
-    // Variables declaration - do not modify//GEN-BEGIN:variables
+    // Variables declaration - do not modify                     
     private javax.swing.JPanel instancePanel;
     private javax.swing.JLabel jLabel1;
     private javax.swing.JPanel jPanel4;
@@ -154,8 +153,6 @@ public class SelectorPanel extends javax.swing.JPanel {
         for (UnitType type : UnitTemplateType.UnitTemplate.UnitType.values()) {
             unitTypeHolderList.add(new UnitTypeHolder(type));
         }
-//        Collections.sort(unitTypeHolderList);
-
         SwingUtilities.invokeLater(() -> {
             unitTypeComboBox.setModel(new javax.swing.DefaultComboBoxModel(unitTypeHolderList.toArray()));
         });
@@ -165,7 +162,6 @@ public class SelectorPanel extends javax.swing.JPanel {
         for (ServiceType type : ServiceType.values()) {
             serviceTypeHolderList.add(new ServiceTypeHolder(type));
         }
-//        Collections.sort(unitTypeHolderList);
         SwingUtilities.invokeLater(() -> {
             serviceTypeComboBox.setModel(new javax.swing.DefaultComboBoxModel(serviceTypeHolderList.toArray()));
         });
@@ -197,7 +193,6 @@ public class SelectorPanel extends javax.swing.JPanel {
                 selectedUnitConfigHolder = null;
                 ExceptionPrinter.printHistory(ex, logger);
             }
-
 
             // update unit types
             try {
@@ -236,21 +231,43 @@ public class SelectorPanel extends javax.swing.JPanel {
 
             // update service types
             try {
-                Set<ServiceTypeHolder> serviceTypeHolderList = new TreeSet<>();
 
-                // apply unit type filter if needed
-                if (unitTypeComboBox.getSelectedItem() != null && !((UnitTypeHolder) unitTypeComboBox.getSelectedItem()).isNotSpecified()) {
-                    serviceTypeHolderList.add(new ServiceTypeHolder(ServiceType.UNKNOWN));
-                    for (final ServiceDescription serviceDescription : Registries.getUnitRegistry().getUnitTemplateByType(((UnitTypeHolder) unitTypeComboBox.getSelectedItem()).getType()).getServiceDescriptionList()) {
-                        serviceTypeHolderList.add(new ServiceTypeHolder(serviceDescription.getType()));
-                    }
+                // precompute location supported services
+                final Set<ServiceType> locationSupportedServiceConfigList;
+                if (!selectedLocationConfigHolder.isNotSpecified()) {
+                    locationSupportedServiceConfigList = Registries.getLocationRegistry().getServiceTypesByLocation(selectedLocationConfigHolder.getConfig().getId());
                 } else {
-                    for (ServiceType type : ServiceType.values()) {
-                        serviceTypeHolderList.add(new ServiceTypeHolder(type));
-                    }
+                    locationSupportedServiceConfigList = null;
                 }
 
-//                Collections.sort(serviceTypeHolderList);
+                // precompute unit supported services
+                final Set<ServiceType> unitTypeSupportedServiceConfigList;
+                if (unitTypeComboBox.getSelectedItem() != null && !((UnitTypeHolder) unitTypeComboBox.getSelectedItem()).isNotSpecified()) {
+                    unitTypeSupportedServiceConfigList = new TreeSet();
+                    for (final ServiceDescription serviceDescription : Registries.getUnitRegistry().getUnitTemplateByType(((UnitTypeHolder) unitTypeComboBox.getSelectedItem()).getType()).getServiceDescriptionList()) {
+                        unitTypeSupportedServiceConfigList.add(serviceDescription.getType());
+                    }
+                } else {
+                    unitTypeSupportedServiceConfigList = null;
+                }
+
+                final Set<ServiceTypeHolder> serviceTypeHolderList = new TreeSet<>();
+                serviceTypeHolderList.add(new ServiceTypeHolder(ServiceType.UNKNOWN));
+                for (ServiceType type : ServiceType.values()) {
+
+                    // apply location type filter if needed
+                    if (locationSupportedServiceConfigList != null && !locationSupportedServiceConfigList.contains(type)) {
+                        continue;
+                    }
+
+                    // apply unit type filter if needed
+                    if (unitTypeSupportedServiceConfigList != null && !unitTypeSupportedServiceConfigList.contains(type)) {
+                        continue;
+                    }
+
+                    serviceTypeHolderList.add(new ServiceTypeHolder(type));
+                }
+
                 SwingUtilities.invokeLater(() -> {
                     serviceTypeComboBox.setEnabled(false);
                     Object selectedItem = serviceTypeComboBox.getSelectedItem();
@@ -278,12 +295,6 @@ public class SelectorPanel extends javax.swing.JPanel {
                     locationComboBox.setEnabled(locationComboBox.getItemCount() > 1);
                 });
 
-
-//                if(selectedLocationConfigHolder != null) {
-////                    locationComboBox.setSelectedItem(selectedLocationConfigHolder);
-//                }
-//
-//                locationComboBox.setEnabled(locationConfigHolderList.size() > 1);
             } catch (CouldNotPerformException ex) {
                 locationComboBox.setEnabled(false);
                 ExceptionPrinter.printHistory(ex, logger);
@@ -345,7 +356,6 @@ public class SelectorPanel extends javax.swing.JPanel {
                 }
 
                 // sort units
-
                 // setup model
                 unitConfigComboBox.setModel(new DefaultComboBoxModel(unitConfigHolderList.toArray()));
                 if (selectedUnitConfigHolder != null) {
@@ -770,7 +780,7 @@ public class SelectorPanel extends javax.swing.JPanel {
         scopeTextField.setText(scopeTextField.getText().toLowerCase());
         updateButtonStates();
     }//GEN-LAST:event_scopeTextFieldFocusLost
-    // End of variables declaration//GEN-END:variables
+    // End of variables declaration                   
 
     private void unitConfigComboBoxPropertyChange(java.beans.PropertyChangeEvent evt) {//GEN-FIRST:event_unitConfigComboBoxPropertyChange
         if (evt.getPropertyName().equals("model")) {
@@ -874,10 +884,10 @@ public class SelectorPanel extends javax.swing.JPanel {
             LocationUnitConfigHolder instance = (LocationUnitConfigHolder) obj;
 
             // handle ALL entry
-            if(locationUnitConfig == null && instance.locationUnitConfig == null) {
+            if (locationUnitConfig == null && instance.locationUnitConfig == null) {
                 return true;
             }
-            if(locationUnitConfig == null || instance.locationUnitConfig == null) {
+            if (locationUnitConfig == null || instance.locationUnitConfig == null) {
                 return super.equals(obj);
             }
 
@@ -890,7 +900,7 @@ public class SelectorPanel extends javax.swing.JPanel {
         public int hashCode() {
 
             // filter all entry location
-            if(locationUnitConfig == null) {
+            if (locationUnitConfig == null) {
                 return super.hashCode();
             }
 
