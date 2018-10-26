@@ -774,7 +774,7 @@ public abstract class AbstractServiceRemote<S extends Service, ST extends Genera
                 }
 
                 // handle state
-                final Message state = (Message) Services.invokeProviderServiceMethod(getServiceType(), service);
+                final Message state = Services.invokeProviderServiceMethod(getServiceType(), service);
                 if (state.getField(valueDescriptor).equals(effectiveState.getValueDescriptor())) {
                     stateBuilder.setField(valueDescriptor, state.getField(valueDescriptor));
                 }

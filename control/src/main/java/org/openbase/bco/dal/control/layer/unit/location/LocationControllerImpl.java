@@ -52,6 +52,7 @@ import rsb.converter.DefaultConverterRepository;
 import rsb.converter.ProtocolBufferConverter;
 import rst.domotic.action.ActionDescriptionType;
 import rst.domotic.action.ActionDescriptionType.ActionDescription;
+import rst.domotic.action.ActionInitiatorType.ActionInitiator.InitiatorType;
 import rst.domotic.action.SnapshotType.Snapshot;
 import rst.domotic.service.ServiceDescriptionType.ServiceDescription;
 import rst.domotic.service.ServiceTemplateType.ServiceTemplate.ServiceType;
@@ -70,6 +71,7 @@ import rst.vision.RGBColorType;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
 import static org.openbase.bco.dal.remote.layer.unit.Units.LOCATION;
@@ -258,7 +260,45 @@ public class LocationControllerImpl extends AbstractBaseUnitController<LocationD
             return super.applyAction(actionDescription);
         }
 
-        return serviceRemoteManager.applyAction(actionDescription);
+
+        if (actionDescription.getServiceStateDescription().getServiceType() == ServiceType.POWER_STATE_SERVICE) {
+            Future future = serviceRemoteManager.applyAction(actionDescription);
+
+            try (ClosableDataBuilder<LocationDataType.LocationData.Builder> dataBuilder = getDataBuilder(this)) {
+                try {
+                    future.get();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new CouldNotPerformException("Could not update initiator of power state", e);
+                } catch (ExecutionException e) {
+                    throw new CouldNotPerformException("Could not update initiator of power state", e);
+                }
+                final ActionDescription.Builder actionDescriptionBuilder = actionDescription.toBuilder();
+                if (actionDescriptionBuilder.getActionInitiator().hasInitiatorId() && !actionDescriptionBuilder.getActionInitiator().getInitiatorId().isEmpty()) {
+                    final UnitConfig initiatorUnitConfig = Registries.getUnitRegistry().getUnitConfigById(actionDescriptionBuilder.getActionInitiator().getInitiatorId());
+                    if ((initiatorUnitConfig.getUnitType() == UnitType.USER && !initiatorUnitConfig.getUserConfig().getSystemUser())) {
+                        actionDescriptionBuilder.getActionInitiatorBuilder().setInitiatorType(InitiatorType.HUMAN);
+                    } else {
+                        actionDescriptionBuilder.getActionInitiatorBuilder().setInitiatorType(InitiatorType.SYSTEM);
+                    }
+                } else if (!actionDescriptionBuilder.getActionInitiator().hasInitiatorType()) {
+                    // if no initiator is defined than use the system as initiator.
+                    actionDescriptionBuilder.getActionInitiatorBuilder().setInitiatorType(InitiatorType.SYSTEM);
+                }
+                dataBuilder.getInternalBuilder().getPowerStateBuilder().setResponsibleAction(actionDescriptionBuilder);
+            } catch (CouldNotPerformException ex) {
+                throw new CouldNotPerformException("Could not update current status!", ex);
+            }
+            return future;
+        } else {
+            return serviceRemoteManager.applyAction(actionDescription);
+        }
+    }
+
+    @Override
+    public void notifyChange() throws CouldNotPerformException, InterruptedException {
+        logger.info("Location {} notify {}", this, getData().getPowerState());
+        super.notifyChange();
     }
 
     @Override

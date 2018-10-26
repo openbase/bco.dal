@@ -19,6 +19,8 @@ import org.openbase.jul.exception.MultiException;
 import org.openbase.jul.exception.NotAvailableException;
 import org.openbase.jul.exception.printer.ExceptionPrinter;
 import org.openbase.jul.exception.printer.LogLevel;
+import org.openbase.jul.pattern.Observer;
+import org.openbase.jul.pattern.provider.DataProvider;
 import rsb.converter.DefaultConverterRepository;
 import rsb.converter.ProtocolBufferConverter;
 import rst.domotic.action.ActionDescriptionType.ActionDescription;
@@ -29,6 +31,7 @@ import rst.domotic.service.ServiceDescriptionType.ServiceDescription;
 import rst.domotic.service.ServiceTemplateType.ServiceTemplate;
 import rst.domotic.service.ServiceTemplateType.ServiceTemplate.ServiceType;
 import rst.domotic.state.*;
+import rst.domotic.state.PowerStateType.PowerState;
 import rst.domotic.state.StandbyStateType.StandbyState;
 import rst.domotic.unit.UnitConfigType.UnitConfig;
 import rst.domotic.unit.UnitTemplateType.UnitTemplate.UnitType;
@@ -365,6 +368,11 @@ public class LocationRemote extends AbstractUnitRemote<LocationData> implements 
     }
 
     @Override
+    public Future<ActionDescription> setPowerState(PowerState powerState) throws CouldNotPerformException {
+        return applyAction(ActionDescriptionProcessor.generateDefaultActionParameter(powerState, ServiceType.POWER_STATE_SERVICE, this));
+    }
+
+    @Override
     public Future<AuthenticatedValue> applyActionAuthenticated(final AuthenticatedValue authenticatedValue) throws CouldNotPerformException {
         if (!SessionManager.getInstance().isLoggedIn()) {
             throw new CouldNotPerformException("Could not apply authenticated action because default session manager not logged in");
@@ -381,6 +389,10 @@ public class LocationRemote extends AbstractUnitRemote<LocationData> implements 
                     continue;
                 }
 
+                return super.applyActionAuthenticated(authenticatedValue);
+            }
+
+            if (actionDescription.getServiceStateDescription().getServiceType() == ServiceType.POWER_STATE_SERVICE) {
                 return super.applyActionAuthenticated(authenticatedValue);
             }
         } catch (CouldNotPerformException ex) {
