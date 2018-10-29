@@ -210,7 +210,13 @@ public class LocationControllerImpl extends AbstractBaseUnitController<LocationD
 
     private void updateUnitData() throws InterruptedException {
         try (ClosableDataBuilder<LocationDataType.LocationData.Builder> dataBuilder = getDataBuilder(this, notifyChange)) {
+            if (getId().equals("f0a71f71-1463-41e3-9c9a-25a02a536001")) {
+                logger.warn("Created data builder {}", notifyChange);
+            }
             serviceRemoteManager.updateBuilderWithAvailableServiceStates(dataBuilder.getInternalBuilder(), getDataClass(), getSupportedServiceTypes());
+            if (getId().equals("f0a71f71-1463-41e3-9c9a-25a02a536001")) {
+                logger.warn("PowerState {}", dataBuilder.getInternalBuilder().getPowerState().getValue().name());
+            }
         } catch (CouldNotPerformException ex) {
             ExceptionPrinter.printHistory(new CouldNotPerformException("Could not update current status!", ex), LocationManagerImpl.LOGGER, LogLevel.WARN);
         }
@@ -289,6 +295,9 @@ public class LocationControllerImpl extends AbstractBaseUnitController<LocationD
                         actionDescriptionBuilder.getActionInitiatorBuilder().setInitiatorType(InitiatorType.SYSTEM);
                     }
                     dataBuilder.getInternalBuilder().getPowerStateBuilder().setResponsibleAction(actionDescriptionBuilder);
+                    if (getId().equals("f0a71f71-1463-41e3-9c9a-25a02a536001")) {
+                        logger.warn("Set responsible action to {}", dataBuilder.getInternalBuilder().getPowerState().getResponsibleAction().getActionInitiator());
+                    }
                 } catch (CouldNotPerformException ex) {
                     throw new CouldNotPerformException("Could not update current status!", ex);
                 }
@@ -303,7 +312,9 @@ public class LocationControllerImpl extends AbstractBaseUnitController<LocationD
 
     @Override
     public void notifyChange() throws CouldNotPerformException, InterruptedException {
-        logger.info("Location {} notify {}", this, getData().getPowerState());
+        if (getId().equals("f0a71f71-1463-41e3-9c9a-25a02a536001")) {
+            logger.info("Location {} notify {}", this, getData().getPowerState());
+        }
         super.notifyChange();
     }
 
