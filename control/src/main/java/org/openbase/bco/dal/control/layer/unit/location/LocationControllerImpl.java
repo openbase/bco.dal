@@ -106,6 +106,8 @@ public class LocationControllerImpl extends AbstractBaseUnitController<LocationD
     private final ServiceRemoteManager serviceRemoteManager;
     private final RecurrenceEventFilter unitEventFilter;
 
+    private boolean notifyChange = true;
+
     public LocationControllerImpl() throws InstantiationException {
         super(LocationControllerImpl.class, LocationData.newBuilder());
 
@@ -207,7 +209,7 @@ public class LocationControllerImpl extends AbstractBaseUnitController<LocationD
     }
 
     private void updateUnitData() throws InterruptedException {
-        try (ClosableDataBuilder<LocationDataType.LocationData.Builder> dataBuilder = getDataBuilder(this)) {
+        try (ClosableDataBuilder<LocationDataType.LocationData.Builder> dataBuilder = getDataBuilder(this, notifyChange)) {
             serviceRemoteManager.updateBuilderWithAvailableServiceStates(dataBuilder.getInternalBuilder(), getDataClass(), getSupportedServiceTypes());
         } catch (CouldNotPerformException ex) {
             ExceptionPrinter.printHistory(new CouldNotPerformException("Could not update current status!", ex), LocationManagerImpl.LOGGER, LogLevel.WARN);
@@ -262,34 +264,38 @@ public class LocationControllerImpl extends AbstractBaseUnitController<LocationD
 
 
         if (actionDescription.getServiceStateDescription().getServiceType() == ServiceType.POWER_STATE_SERVICE) {
-            Future future = serviceRemoteManager.applyAction(actionDescription);
-
-            try (ClosableDataBuilder<LocationDataType.LocationData.Builder> dataBuilder = getDataBuilder(this)) {
-                try {
-                    future.get();
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    throw new CouldNotPerformException("Could not update initiator of power state", e);
-                } catch (ExecutionException e) {
-                    throw new CouldNotPerformException("Could not update initiator of power state", e);
-                }
-                final ActionDescription.Builder actionDescriptionBuilder = actionDescription.toBuilder();
-                if (actionDescriptionBuilder.getActionInitiator().hasInitiatorId() && !actionDescriptionBuilder.getActionInitiator().getInitiatorId().isEmpty()) {
-                    final UnitConfig initiatorUnitConfig = Registries.getUnitRegistry().getUnitConfigById(actionDescriptionBuilder.getActionInitiator().getInitiatorId());
-                    if ((initiatorUnitConfig.getUnitType() == UnitType.USER && !initiatorUnitConfig.getUserConfig().getSystemUser())) {
-                        actionDescriptionBuilder.getActionInitiatorBuilder().setInitiatorType(InitiatorType.HUMAN);
-                    } else {
+            notifyChange = false;
+            try {
+                Future future = serviceRemoteManager.applyAction(actionDescription);
+                try (ClosableDataBuilder<LocationDataType.LocationData.Builder> dataBuilder = getDataBuilder(this)) {
+                    try {
+                        future.get();
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        throw new CouldNotPerformException("Could not update initiator of power state", e);
+                    } catch (ExecutionException e) {
+                        throw new CouldNotPerformException("Could not update initiator of power state", e);
+                    }
+                    final ActionDescription.Builder actionDescriptionBuilder = actionDescription.toBuilder();
+                    if (actionDescriptionBuilder.getActionInitiator().hasInitiatorId() && !actionDescriptionBuilder.getActionInitiator().getInitiatorId().isEmpty()) {
+                        final UnitConfig initiatorUnitConfig = Registries.getUnitRegistry().getUnitConfigById(actionDescriptionBuilder.getActionInitiator().getInitiatorId());
+                        if ((initiatorUnitConfig.getUnitType() == UnitType.USER && !initiatorUnitConfig.getUserConfig().getSystemUser())) {
+                            actionDescriptionBuilder.getActionInitiatorBuilder().setInitiatorType(InitiatorType.HUMAN);
+                        } else {
+                            actionDescriptionBuilder.getActionInitiatorBuilder().setInitiatorType(InitiatorType.SYSTEM);
+                        }
+                    } else if (!actionDescriptionBuilder.getActionInitiator().hasInitiatorType()) {
+                        // if no initiator is defined than use the system as initiator.
                         actionDescriptionBuilder.getActionInitiatorBuilder().setInitiatorType(InitiatorType.SYSTEM);
                     }
-                } else if (!actionDescriptionBuilder.getActionInitiator().hasInitiatorType()) {
-                    // if no initiator is defined than use the system as initiator.
-                    actionDescriptionBuilder.getActionInitiatorBuilder().setInitiatorType(InitiatorType.SYSTEM);
+                    dataBuilder.getInternalBuilder().getPowerStateBuilder().setResponsibleAction(actionDescriptionBuilder);
+                } catch (CouldNotPerformException ex) {
+                    throw new CouldNotPerformException("Could not update current status!", ex);
                 }
-                dataBuilder.getInternalBuilder().getPowerStateBuilder().setResponsibleAction(actionDescriptionBuilder);
-            } catch (CouldNotPerformException ex) {
-                throw new CouldNotPerformException("Could not update current status!", ex);
+                return future;
+            } finally {
+                notifyChange = true;
             }
-            return future;
         } else {
             return serviceRemoteManager.applyAction(actionDescription);
         }
