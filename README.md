@@ -1,3 +1,3 @@
 # BCO Domotic Abstraction Layer
 
-Use the dal.lib to request or control any bco units in the smart home context.
+This repository was archived and its content has been merged into the new bco mono repository at: https://github.com/openbase/bco
